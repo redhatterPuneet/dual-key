@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dualkey-operator
+  namespace: dualkey
+  labels:
+    app.kubernetes.io/name: dualkey
+    app.kubernetes.io/component: operator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: operator
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dualkey
+        app.kubernetes.io/component: operator
+    spec:
+      serviceAccountName: dualkey-operator
+      containers:
+        - name: operator
+          image: image-registry.openshift-image-registry.svc:5000/dualkey/dualkey:latest
+          command: ["kopf", "run", "--standalone", "--namespace", "dualkey",
+                    "--liveness", "http://0.0.0.0:8080/healthz", "-m", "dualkey.operator"]
+          ports:
+            - containerPort: 8080
+              name: health
+          livenessProbe:
+            httpGet: {path: /healthz, port: 8080}
+            periodSeconds: 30
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 512Mi}

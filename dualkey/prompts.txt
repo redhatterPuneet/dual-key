@@ -1,0 +1,61 @@
+# Public, harmless test prompts for the Dual-Key lab. One per line.
+Explain in two sentences why the sky looks blue.
+What is 15 percent of 2,000? Show the calculation.
+Write a short haiku about autumn leaves.
+List three benefits of regular exercise.
+Summarize the water cycle in simple terms.
+What is the capital of Canada, and what river is it on?
+Translate "good morning, how are you?" into Spanish.
+Give a one-paragraph explanation of how a refrigerator works.
+What are the primary colors of light?
+Convert 100 degrees Fahrenheit to Celsius and explain the formula.
+Describe the difference between a virus and a bacterium.
+Write a polite email declining a meeting invitation.
+What does a compiler do?
+Name four planets in our solar system and one fact about each.
+Explain compound interest with a small example.
+What is the Pythagorean theorem? Give an example with numbers.
+Suggest three names for a friendly golden retriever.
+How do vaccines help the immune system?
+Explain what an API is to a non-technical person.
+What causes the seasons on Earth?
+Write a two-line poem about the ocean.
+List the steps to make a cup of tea.
+What is the difference between weather and climate?
+Explain recursion using a simple example.
+What is photosynthesis?
+Give three tips for writing a clear report.
+How many minutes are there in a week? Show your work.
+Describe how a bill becomes a law in general terms.
+What is the boiling point of water at sea level in Celsius and Fahrenheit?
+Explain the difference between RAM and storage.
+Write a short product description for a reusable water bottle.
+What are prime numbers? List the first ten.
+Explain supply and demand in three sentences.
+What is the purpose of a firewall in a computer network?
+Give a short summary of how airplanes generate lift.
+What does DNA stand for and what does it do?
+Write a friendly reminder message about a team meeting tomorrow.
+Explain the difference between latitude and longitude.
+What is machine learning, in one paragraph?
+If a train travels 120 km in 1.5 hours, what is its average speed?
+Describe three ways to reduce household energy use.
+What is the role of the mitochondria in a cell?
+Explain what a container is in cloud computing.
+What is the median of 3, 9, 4, 7 and 12?
+Write a short thank-you note to a colleague.
+Why do we have leap years?
+Explain what latency means in networking.
+List three renewable energy sources and one advantage of each.
+What is the difference between a list and a tuple in Python?
+Describe the main idea of the theory of evolution in simple words.
+What is 17 multiplied by 23?
+Explain what a GPU is and why it is useful for AI.
+Give a short definition of inflation.
+What are the three states of matter?
+Write a one-sentence summary of the story of Cinderella.
+Explain how a search engine finds web pages, briefly.
+What is the area of a circle with a radius of 5 cm?
+Name three famous mountain ranges and the continents they are on.
+Explain the difference between HTTP and HTTPS.
+What is the purpose of a budget?

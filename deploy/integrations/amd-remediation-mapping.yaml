@@ -1,0 +1,40 @@
+# AMD GPU Operator auto-remediation: run AMD's repair workflow when Dual-Key flags a node.
+#
+# The AMD GPU Operator watches node conditions and starts an Argo remediation workflow for
+# conditions listed in its mapping ConfigMap: taint, drain AMD GPU pods, reboot, run a
+# validation test (RVS), wait for the condition to clear, untaint.
+#
+# With DualKeyCluster spec.remediation.action: handoff, Dual-Key sets the node condition
+# DualKeyInferenceIntegrity=True and, when it sees the node reboot (the workflow's reboot
+# step), releases the incident: it clears the condition, which lets the workflow finish, and
+# re-checks the GPU against its peers before resolving the incident.
+#
+# NOTE: AMD documents conditions set by Node Problem Detector. Using a condition set by
+# another controller follows the same mechanism but is not described in AMD's docs; verify
+# on a test node first.
+#
+# Add this entry to the ConfigMap your DeviceConfig references under
+# spec.remediationWorkflow.config.name (default: default-conditional-workflow-mappings),
+# keeping the existing entries.
+# Reference: https://instinct.docs.amd.com/projects/gpu-operator/en/main/autoremediation/auto-remediation.html
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dualkey-remediation-mappings
+  namespace: amd-gpu-operator          # the AMD GPU Operator's namespace
+data:
+  workflow: |
+    - nodeCondition: DualKeyInferenceIntegrity
+      workflowTemplate: default-template
+      validationTestsProfile:
+        framework: RVS
+        recipe: quick
+        iterations: 1
+        stopOnFailure: true
+        timeoutSeconds: 1800
+      physicalActionNeeded: false
+      notifyTestFailureMessage: "Dual-Key flagged silent data corruption and AMD validation failed: replace or RMA this GPU."
+      recoveryPolicy:
+        maxAllowedRunsPerWindow: 2
+        windowSize: 24h
+      skipRebootStep: false

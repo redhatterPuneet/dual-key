@@ -1,0 +1,216 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dualkey-operator
+  namespace: dualkey
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dualkey-detector
+  namespace: dualkey
+---
+# Operator: manage everything inside the dualkey namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dualkey-operator
+  namespace: dualkey
+rules:
+  - apiGroups: [dualkey.io]
+    resources: [dualkeyclusters, dualkeyclusters/status, gpuhealthrecords, gpuhealthrecords/status,
+                comparisongroups, comparisongroups/status, gpuintegrityincidents, gpuintegrityincidents/status]
+    verbs: [get, list, watch, create, update, patch, delete]
+  # OpenShift: owner references to a DualKeyCluster require update on its finalizers
+  - apiGroups: [dualkey.io]
+    resources: [dualkeyclusters/finalizers, comparisongroups/finalizers, gpuhealthrecords/finalizers,
+                gpuintegrityincidents/finalizers]
+    verbs: [update]
+  - apiGroups: [""]
+    resources: [configmaps, secrets, services, pods, serviceaccounts]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [events]
+    verbs: [create, patch]
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [create, patch]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [route.openshift.io]
+    resources: [routes, routes/custom-host]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [monitoring.coreos.com]
+    resources: [servicemonitors]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dualkey-operator
+  namespace: dualkey
+subjects:
+  - kind: ServiceAccount
+    name: dualkey-operator
+    namespace: dualkey
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dualkey-operator
+---
+# Operator: taint/untaint GPU nodes and discover APIs (cluster-wide, read-mostly)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dualkey-operator
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get, list, watch, patch]
+  # incidents: set the DualKeyInferenceIntegrity node condition (read by NVSentinel / AMD remediation)
+  - apiGroups: [""]
+    resources: [nodes/status]
+    verbs: [patch]
+  # discovery: read pods in all namespaces to find model servers on GPUs
+  # response policy: drain (Eviction API, respects PodDisruptionBudgets) or evict (delete)
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [get, list, watch, delete]
+  - apiGroups: [""]
+    resources: [pods/eviction]
+    verbs: [create]
+  # vendor diagnostics: run dcgmi / amd-smi inside the vendor's own pod on the node
+  - apiGroups: [""]
+    resources: [pods/exec]
+    verbs: [create, get]
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs: [get, list, watch]
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dualkey-operator
+subjects:
+  - kind: ServiceAccount
+    name: dualkey-operator
+    namespace: dualkey
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dualkey-operator
+---
+# Detector: write scores into GPUHealthRecord / DualKeyCluster status
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dualkey-detector
+  namespace: dualkey
+rules:
+  - apiGroups: [dualkey.io]
+    resources: [gpuhealthrecords, dualkeyclusters, comparisongroups]
+    verbs: [get, list, watch, patch]
+  - apiGroups: [dualkey.io]
+    resources: [gpuhealthrecords/status, dualkeyclusters/status]
+    verbs: [get, patch, update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dualkey-detector
+  namespace: dualkey
+subjects:
+  - kind: ServiceAccount
+    name: dualkey-detector
+    namespace: dualkey
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dualkey-detector
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dualkey-ui
+  namespace: dualkey
+---
+# Dashboard: read-only view of Dual-Key objects
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dualkey-ui
+  namespace: dualkey
+rules:
+  - apiGroups: [dualkey.io]
+    resources: [dualkeyclusters, comparisongroups, gpuhealthrecords, gpuintegrityincidents]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dualkey-ui
+  namespace: dualkey
+subjects:
+  - kind: ServiceAccount
+    name: dualkey-ui
+    namespace: dualkey
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dualkey-ui
+---
+# Dashboard: read GPU nodes (product, zone, taint, health conditions) and find the
+# vendor metric exporter pods (to match their metrics to nodes)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dualkey-ui
+rules:
+  - apiGroups: [""]
+    resources: [nodes, pods]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dualkey-ui
+subjects:
+  - kind: ServiceAccount
+    name: dualkey-ui
+    namespace: dualkey
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dualkey-ui
+---
+# Dashboard: read vendor GPU metrics (DCGM / AMD exporter) from OpenShift monitoring
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dualkey-ui-monitoring
+subjects:
+  - kind: ServiceAccount
+    name: dualkey-ui
+    namespace: dualkey
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-monitoring-view
+---
+# Operator: read vendor GPU metrics for the incident's telemetry snapshot
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dualkey-operator-monitoring
+subjects:
+  - kind: ServiceAccount
+    name: dualkey-operator
+    namespace: dualkey
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-monitoring-view

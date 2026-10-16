@@ -1,0 +1,25 @@
+# Builds the single Dual-Key image inside OpenShift from your local folder:
+#   oc apply -f deploy/build.yaml
+#   oc start-build dualkey -n dualkey --from-dir=. --follow
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: dualkey
+  namespace: dualkey
+---
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: dualkey
+  namespace: dualkey
+spec:
+  source:
+    type: Binary
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Containerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: dualkey:latest

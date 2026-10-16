@@ -1,0 +1,50 @@
+# Manual lab setup: 3 GPUs (2 NVIDIA + 1 AMD), one copy of the same model on each.
+# For the default discovery mode, use dualkeycluster-discover.yaml instead.
+# Replace the node names with your GPU worker nodes:  oc get nodes -l nvidia.com/gpu.present=true
+apiVersion: dualkey.io/v1alpha1
+kind: DualKeyCluster
+metadata:
+  name: lab
+  namespace: dualkey
+spec:
+  mode: manual
+  model:
+    name: ibm-granite/granite-3.3-2b-instruct   # small enough for a 24 GB GPU
+    servedName: granite
+    maxModelLen: 4096
+    # revision: <pin a commit hash for repeatable results>
+  gpus:
+    - name: nv-a
+      vendor: nvidia
+      node: REPLACE-gpu-node-1
+    - name: nv-b
+      vendor: nvidia
+      node: REPLACE-gpu-node-2
+      faultInjection:
+        enabled: false        # set to true AFTER the learning period to break this GPU
+        bit: 13               # bf16 exponent bit: a strong, visible fault
+        count: 200
+        seed: 7
+    - name: amd-1
+      vendor: amd
+      node: REPLACE-gpu-node-3
+      # If the AMD GPU is outside the cluster, remove "node" and set:
+      # endpoint: https://amd-vm.example.com:8000
+  sampling:
+    rate: 0.05
+    suspectRate: 0.5
+  checks:
+    crossVendorWeight: 0.7
+    checkAll: true            # lab: check every sample on BOTH other GPUs (faster, clearer)
+  detector:
+    baselineSamples: 200      # checks per vendor pairing to learn "normal"
+    minPairChecks: 20
+    suspectZ: 3
+    quarantineZ: 5
+    confirmChecks: 10
+  remediation:
+    taintNodes: true
+  gateway:
+    route: true
+  monitoring:
+    serviceMonitor: false     # true if user-workload monitoring is enabled

@@ -1,0 +1,19 @@
+# Test client: sends prompts to the gateway like a real app would.
+# --sample-all makes the gateway check every request (fast lab results).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  generateName: dualkey-loadgen-
+  namespace: dualkey
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: loadgen
+          image: image-registry.openshift-image-registry.svc:5000/dualkey/dualkey:latest
+          command: ["python", "-m", "dualkey.loadgen",
+                    "--url", "http://dualkey-gateway:8080",
+                    "--requests", "1500", "--concurrency", "6",
+                    "--max-tokens", "64", "--sample-all"]

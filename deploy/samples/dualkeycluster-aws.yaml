@@ -1,0 +1,42 @@
+# Discovery mode tuned for the 3 AWS GPU nodes created by scripts/setup-aws-gpus.sh
+# (g4dn T4, g5 A10G, g6 L4 - all NVIDIA; AWS offers no AMD Instinct GPUs).
+# No model runs on them yet, so the operator falls back to the reference model and
+# places it on all three: watch the group form on the dashboard.
+apiVersion: dualkey.io/v1alpha1
+kind: DualKeyCluster
+metadata:
+  name: fleet
+  namespace: dualkey
+spec:
+  mode: discover
+  discovery:
+    intervalSeconds: 30
+    minMembers: 3
+  reference:
+    enabled: true
+    gpus: 3
+  model:
+    name: ibm-granite/granite-3.3-2b-instruct
+    servedName: granite
+    maxModelLen: 4096
+    dtype: float16            # T4 (g4dn) has no bfloat16; all members must use the same precision
+  modelServers:
+    cpu: "2"
+    memory: 10Gi              # fits the 16 GB *.xlarge GPU instances
+    shmSize: 2Gi
+    storageSize: 30Gi
+  probe:
+    rate: 1.0
+    maxTokens: 48
+  checks:
+    crossVendorWeight: 0.7
+    checkAll: true            # 3 GPUs: check every probe on both other GPUs for faster results
+  detector:
+    baselineSamples: 200
+    suspectZ: 3
+    quarantineZ: 5
+    confirmChecks: 10
+  remediation:
+    # cordon = taint the node dualkey.io/suspect:NoSchedule (these GPU nodes exist only for Dual-Key).
+    # Other choices: alert, drain, evict, handoff (let NVSentinel / AMD remediation act; see deploy/integrations)
+    action: cordon

@@ -1,0 +1,36 @@
+# Default mode: find the model servers already running on GPUs and group them.
+# If no group with 3 ready members can be formed, the reference model below is
+# deployed on free GPUs automatically. Watch it happen on the dashboard:
+#   oc get route dualkey-dashboard -n dualkey
+apiVersion: dualkey.io/v1alpha1
+kind: DualKeyCluster
+metadata:
+  name: fleet
+  namespace: dualkey
+spec:
+  mode: discover
+  discovery:
+    intervalSeconds: 30
+    minMembers: 3
+    # namespaces: [chatbot, rag]          # limit the scan (default: all namespaces)
+    # excludeNamespaces: [openshift-, kube-]
+  reference:
+    enabled: true                        # deploy the model below if no group can be formed
+    gpus: 3
+  model:                                 # the prebuilt reference model
+    name: ibm-granite/granite-3.3-2b-instruct
+    servedName: granite
+    maxModelLen: 4096
+  probe:
+    rate: 1.0                            # test prompts per second per group
+    maxTokens: 48
+  checks:
+    crossVendorWeight: 0.7
+    checkAll: false
+  detector:
+    baselineSamples: 200
+    suspectZ: 3
+    quarantineZ: 5
+    confirmChecks: 10
+  remediation:
+    taintNodes: false                    # do not taint nodes that run other teams' models

@@ -1,0 +1,61 @@
+# NVIDIA NVSentinel values for OpenShift + Dual-Key (lab setup).
+# Used by scripts/install-nvsentinel.sh:
+#   helm upgrade --install nvsentinel oci://ghcr.io/nvidia/nvsentinel -n nvsentinel -f this-file
+#
+# What it turns on:
+#   - kubernetes-object-monitor with one policy: node condition DualKeyInferenceIntegrity=True
+#     becomes a fatal GPU health event (agent kubernetes-object-monitor). NVSentinel's default
+#     "Kubernetes object monitor fatal error ruleset" then cordons the node, and the node drainer
+#     evicts its workloads. When Dual-Key clears the condition the monitor sends a healthy
+#     event and NVSentinel uncordons the node.
+#   - fault-quarantine (cordon) and node-drainer (evict), with MongoDB for its state.
+#   - NVSentinel's own GPU (DCGM) and syslog health monitors, pointed at OpenShift's DCGM service.
+# Not turned on: fault remediation / janitor (GPU reset, reboot). Add later with
+#   --set global.faultRemediation.enabled=true --set global.janitor.enabled=true ...
+# Reference: https://github.com/NVIDIA/NVSentinel
+global:
+  dcgm:
+    mode: operator-service
+    service:
+      endpoint: "nvidia-dcgm.nvidia-gpu-operator.svc"    # OpenShift's GPU Operator namespace
+      port: 5555
+  mongodbStore:
+    enabled: true
+  kubernetesObjectMonitor:
+    enabled: true
+  faultQuarantine:
+    enabled: true
+  nodeDrainer:
+    enabled: true
+
+podMonitor:
+  enabled: false
+
+fault-quarantine:
+  circuitBreaker:
+    enabled: false        # small lab cluster: one cordoned GPU node is a large share of all GPU nodes
+
+node-drainer:
+  # Never evict OpenShift, GPU Operator, cert-manager or Dual-Key pods (Dual-Key's own model
+  # server stays on the node so the GPU can be re-checked after repair).
+  systemNamespaces: "^(nvsentinel|kube-system|openshift-.*|nvidia-gpu-operator|cert-manager|dualkey)$"
+
+kubernetes-object-monitor:
+  policies:
+    - name: DualKeyInferenceIntegrity          # becomes the health event checkName
+      enabled: true
+      resource:
+        group: ""
+        version: v1
+        kind: Node
+      predicate:
+        expression: |
+          has(resource.status.conditions) &&
+          resource.status.conditions.exists(c, c.type == "DualKeyInferenceIntegrity" && c.status == "True")
+      healthEvent:
+        componentClass: GPU
+        isFatal: true                           # fatal = quarantine (cordon) and drain
+        message: "Dual-Key: this GPU's answers disagree with every peer running the same model (suspected silent data corruption)"
+        recommendedAction: CONTACT_SUPPORT
+        errorCode:
+          - DUALKEY_INFERENCE_INTEGRITY

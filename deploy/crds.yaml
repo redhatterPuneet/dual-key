@@ -1,0 +1,315 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: dualkeyclusters.dualkey.io
+spec:
+  group: dualkey.io
+  scope: Namespaced
+  names:
+    kind: DualKeyCluster
+    plural: dualkeyclusters
+    singular: dualkeycluster
+    shortNames: [dkc]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - {name: Mode, type: string, jsonPath: .spec.mode}
+        - {name: Phase, type: string, jsonPath: .status.phase}
+        - {name: Servers, type: integer, jsonPath: .status.discovery.servers}
+        - {name: Message, type: string, jsonPath: .status.message, priority: 1}
+        - {name: Age, type: date, jsonPath: .metadata.creationTimestamp}
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                mode:
+                  type: string
+                  enum: [discover, manual]
+                  description: discover (default) finds existing model servers; manual uses spec.gpus
+                discovery:
+                  type: object
+                  properties:
+                    intervalSeconds: {type: integer, minimum: 10}
+                    minMembers: {type: integer, minimum: 2}
+                    namespaces:
+                      type: array
+                      description: Only scan these namespaces (empty = all)
+                      items: {type: string}
+                    excludeNamespaces:
+                      type: array
+                      description: Namespace prefixes to skip (default openshift-, kube-)
+                      items: {type: string}
+                reference:
+                  type: object
+                  description: Fallback - deploy spec.model on free GPUs when no group can be formed
+                  properties:
+                    enabled: {type: boolean}
+                    gpus: {type: integer, minimum: 3}
+                probe:
+                  type: object
+                  properties:
+                    rate: {type: number, description: Probe prompts per second per group}
+                    maxTokens: {type: integer}
+                image:
+                  type: string
+                  description: Dual-Key image (gateway, verifier, detector, init helpers)
+                redisImage: {type: string}
+                model:
+                  type: object
+                  properties:
+                    name: {type: string, description: Hugging Face model id}
+                    revision: {type: string, description: Pin an exact model revision}
+                    servedName: {type: string}
+                    maxModelLen: {type: integer}
+                    dtype: {type: string, description: "bfloat16 (default) or float16 (needed on T4 / g4dn)"}
+                    hfTokenSecret: {type: string, description: Secret with key HF_TOKEN (optional)}
+                modelServers:
+                  type: object
+                  properties:
+                    nvidiaImage: {type: string}
+                    amdImage: {type: string}
+                    storageSize: {type: string}
+                    shmSize: {type: string}
+                    cpu: {type: string}
+                    memory: {type: string}
+                    extraArgs:
+                      type: array
+                      items: {type: string}
+                gpus:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [name, vendor]
+                    properties:
+                      name:
+                        type: string
+                        pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$'
+                      vendor:
+                        type: string
+                        enum: [nvidia, amd]
+                      node:
+                        type: string
+                        description: GPU worker node to run this GPU's model server on
+                      endpoint:
+                        type: string
+                        description: Use an existing vLLM server instead of deploying one
+                      auth:
+                        type: string
+                        enum: [dualkey, discovery, none]
+                      faultInjection:
+                        type: object
+                        description: LAB ONLY - flip bits in this GPU's model copy
+                        properties:
+                          enabled: {type: boolean}
+                          bit: {type: integer, minimum: 0, maximum: 31}
+                          count: {type: integer, minimum: 1}
+                          seed: {type: integer}
+                          tensor: {type: string}
+                sampling:
+                  type: object
+                  properties:
+                    rate: {type: number}
+                    suspectRate: {type: number}
+                checks:
+                  type: object
+                  properties:
+                    crossVendorWeight: {type: number}
+                    checkAll: {type: boolean}
+                    verifierReplicas: {type: integer}
+                    concurrency: {type: integer}
+                detector:
+                  type: object
+                  properties:
+                    baselineSamples: {type: integer}
+                    stdFloor: {type: number}
+                    ewmaAlpha: {type: number}
+                    minPairChecks: {type: integer}
+                    minPartners: {type: integer}
+                    partnerQuantile: {type: number}
+                    suspectZ: {type: number}
+                    quarantineZ: {type: number}
+                    confirmChecks: {type: integer}
+                remediation:
+                  type: object
+                  description: What to do with the node of a quarantined GPU (see GPUIntegrityIncident)
+                  properties:
+                    action:
+                      type: string
+                      enum: [alert, cordon, drain, evict, handoff]
+                      description: >-
+                        alert = record only; cordon = taint NoSchedule (running pods stay);
+                        drain = cordon + evict GPU pods (respects PodDisruptionBudgets);
+                        evict = cordon + delete GPU pods now; handoff = set node condition
+                        DualKeyInferenceIntegrity for NVSentinel / AMD GPU Operator to act on
+                    taintNodes: {type: boolean, description: "Deprecated: true = cordon, false = alert"}
+                    nodeCondition: {type: boolean, description: Set node condition DualKeyInferenceIntegrity (default true)}
+                    gracePeriodSeconds: {type: integer}
+                    skipNamespaces:
+                      type: array
+                      items: {type: string}
+                    autoReleaseAfterReboot: {type: boolean, description: "Release when the node reboots (default: true for handoff)"}
+                    validation:
+                      type: object
+                      properties:
+                        checksPerPartner: {type: integer}
+                        timeoutMinutes: {type: integer}
+                    diagnostics:
+                      type: object
+                      description: Per vendor (nvidia, amd) - enabled, podSelectors, command, container, timeoutSeconds
+                      x-kubernetes-preserve-unknown-fields: true
+                cost:
+                  type: object
+                  description: "gpuHourUSD: a number, or a map of instance type / node name to USD per GPU-hour"
+                  x-kubernetes-preserve-unknown-fields: true
+                gateway:
+                  type: object
+                  properties:
+                    route: {type: boolean}
+                    replicas: {type: integer}
+                monitoring:
+                  type: object
+                  properties:
+                    serviceMonitor: {type: boolean}
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gpuhealthrecords.dualkey.io
+spec:
+  group: dualkey.io
+  scope: Namespaced
+  names:
+    kind: GPUHealthRecord
+    plural: gpuhealthrecords
+    singular: gpuhealthrecord
+    shortNames: [ghr]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - {name: Group, type: string, jsonPath: .spec.group}
+        - {name: Vendor, type: string, jsonPath: .spec.vendor}
+        - {name: Node, type: string, jsonPath: .spec.node}
+        - {name: State, type: string, jsonPath: .status.state}
+        - {name: Score, type: number, jsonPath: .status.score}
+        - {name: Partners, type: integer, jsonPath: .status.partners}
+        - {name: Checks, type: integer, jsonPath: .status.checks}
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                gpu: {type: string, description: Member name}
+                vendor: {type: string}
+                node: {type: string}
+                group: {type: string}
+                release:
+                  type: boolean
+                  description: Set to true after repair to clear the quarantine
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: comparisongroups.dualkey.io
+spec:
+  group: dualkey.io
+  scope: Namespaced
+  names:
+    kind: ComparisonGroup
+    plural: comparisongroups
+    singular: comparisongroup
+    shortNames: [cg]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - {name: Source, type: string, jsonPath: .spec.source}
+        - {name: Phase, type: string, jsonPath: .status.phase}
+        - {name: Ready, type: integer, jsonPath: .status.readyMembers}
+        - {name: Model, type: string, jsonPath: .spec.modelId}
+        - {name: Message, type: string, jsonPath: .status.message}
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              properties:
+                modelId: {type: string}
+                dtype: {type: string}
+                quantization: {type: string}
+                source: {type: string, description: discovered, reference or manual}
+                identity:
+                  type: object
+                  description: What every member shares (model, revision, checksum, dtype, tokenizer, vLLM version)
+                  additionalProperties: {type: string}
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: gpuintegrityincidents.dualkey.io
+spec:
+  group: dualkey.io
+  scope: Namespaced
+  names:
+    kind: GPUIntegrityIncident
+    plural: gpuintegrityincidents
+    singular: gpuintegrityincident
+    shortNames: [gii]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - {name: GPU, type: string, jsonPath: .spec.gpu}
+        - {name: Node, type: string, jsonPath: .spec.node}
+        - {name: Phase, type: string, jsonPath: .status.phase}
+        - {name: Policy, type: string, jsonPath: .status.policy}
+        - {name: Vendor-Diag, type: string, jsonPath: .status.diagnostics.result}
+        - {name: Age, type: date, jsonPath: .metadata.creationTimestamp}
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: >-
+            Opened when Dual-Key quarantines a GPU. Holds the evidence, the vendor telemetry and
+            diagnostic for the node, and every action taken. Set spec.release to true after
+            repair; the GPU is then re-checked against its partners before the incident resolves.
+          properties:
+            spec:
+              type: object
+              properties:
+                gpu: {type: string}
+                node: {type: string}
+                vendor: {type: string}
+                group: {type: string}
+                release: {type: boolean}
+            status:
+              type: object
+              x-kubernetes-preserve-unknown-fields: true

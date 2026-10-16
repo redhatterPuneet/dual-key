@@ -1,0 +1,970 @@
+<title>Dual-Key Fleet View</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@600;700&family=Red+Hat+Mono:wght@400;500&family=Red+Hat+Text:wght@400;500;600&display=swap">
+<style>
+/* Three numbered views, top to bottom: 1 what was found, 2 what each part is doing, 3 what the Detector sees. */
+:root {
+  --bg: #f3f6f8; --surface: #ffffff; --sunk: #eaeff3; --line: #d3dce3; --wire: #9fb0bd;
+  --fg: #142029; --muted: #5b6b78; --accent: #0d6a8c; --accent-soft: #d9edf5;
+  --good: #23784a; --good-soft: #dcf0e4; --warn: #9a6200; --warn-soft: #fbecd2;
+  --crit: #b0271f; --crit-soft: #f8dcd9; --idle: #6c7a86; --idle-soft: #e6ebef;
+  --v-nvidia: #3f6b52; --v-amd: #7a4a63;
+  --s1: #0d6a8c; --s2: #8a4fb0; --s3: #b25a12; --s4: #2f7d5b; --s5: #a3324f; --s6: #4d5fb8;
+  --f-display: "Red Hat Display", "Segoe UI", system-ui, sans-serif;
+  --f-body: "Red Hat Text", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "Red Hat Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0e141a; --surface: #151d25; --sunk: #111820; --line: #2a3742; --wire: #4c5d6b;
+  --fg: #e2e9ee; --muted: #93a3b0; --accent: #57b6db; --accent-soft: #15303d;
+  --good: #63c48f; --good-soft: #163327; --warn: #e3a73f; --warn-soft: #382a12;
+  --crit: #f0756c; --crit-soft: #3d1c1a; --idle: #93a3b0; --idle-soft: #1e2831;
+  --v-nvidia: #8fc4a3; --v-amd: #d5a2bd;
+  --s1: #57b6db; --s2: #c49be0; --s3: #eba062; --s4: #6fc79b; --s5: #ec8aa3; --s6: #9aa8f0; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0e141a; --surface: #151d25; --sunk: #111820; --line: #2a3742; --wire: #4c5d6b;
+  --fg: #e2e9ee; --muted: #93a3b0; --accent: #57b6db; --accent-soft: #15303d;
+  --good: #63c48f; --good-soft: #163327; --warn: #e3a73f; --warn-soft: #382a12;
+  --crit: #f0756c; --crit-soft: #3d1c1a; --idle: #93a3b0; --idle-soft: #1e2831;
+  --v-nvidia: #8fc4a3; --v-amd: #d5a2bd;
+  --s1: #57b6db; --s2: #c49be0; --s3: #eba062; --s4: #6fc79b; --s5: #ec8aa3; --s6: #9aa8f0; color-scheme: dark }
+
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 400 14px/1.5 var(--f-body); }
+.wrap { max-width: 1280px; margin: 0 auto; padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 22px; }
+h1, h2, h3 { font-family: var(--f-display); margin: 0; letter-spacing: -0.01em; text-wrap: balance }
+h1 { font-size: 22px } h2 { font-size: 18px } h3 { font-size: 14px }
+p { margin: 0 }
+.mono { font-family: var(--f-mono); font-size: 12px }
+.muted { color: var(--muted) }
+.small { font-size: 12.5px }
+.label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600 }
+button { font: 600 13px var(--f-body); color: var(--accent); background: var(--surface); border: 1px solid var(--accent);
+  border-radius: 8px; padding: 6px 12px; cursor: pointer }
+button[aria-pressed="true"] { background: var(--accent); color: var(--surface) }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; justify-content: space-between }
+.title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px }
+.headline { font-size: 15px; margin-top: 4px }
+.pill { display: inline-flex; align-items: center; gap: 6px; font: 600 12px/1 var(--f-body); padding: 5px 9px;
+  border-radius: 999px; background: var(--idle-soft); color: var(--idle); white-space: nowrap }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor }
+.pill.good { background: var(--good-soft); color: var(--good) } .pill.warn { background: var(--warn-soft); color: var(--warn) }
+.pill.crit { background: var(--crit-soft); color: var(--crit) } .pill.info { background: var(--accent-soft); color: var(--accent) }
+.demo-banner { background: var(--accent-soft); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 10px 14px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap }
+.error { background: var(--crit-soft); color: var(--crit); border-radius: var(--radius); padding: 10px 14px }
+
+section.view { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 18px 20px;
+  display: grid; gap: 14px; min-width: 0 }
+.view-head { display: flex; gap: 12px; align-items: flex-start }
+.num { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--surface);
+  display: grid; place-items: center; font: 700 14px var(--f-display) }
+.view-head p { color: var(--muted); margin-top: 2px; max-width: 75ch }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted) }
+.legend span { display: inline-flex; align-items: center; gap: 6px }
+.legend i { width: 18px; height: 0; border-top: 2px solid; display: inline-block }
+
+/* blocks shared by views 1 and 2 */
+.blk { position: relative; z-index: 1; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 9px 12px; min-width: 0 }
+.blk[data-state] { border-left-width: 4px }
+.blk[data-state="Healthy"] { border-left-color: var(--good) } .blk[data-state="Suspect"] { border-left-color: var(--warn) }
+.blk[data-state="Quarantined"] { border-left-color: var(--crit); background: var(--crit-soft) }
+.blk[data-state="Learning"] { border-left-color: var(--accent) } .blk[data-state="Starting"] { border-left-color: var(--idle) }
+.blk .top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline }
+.blk b { font-weight: 600 }
+.blk .meta { font-size: 12px; color: var(--muted); overflow-wrap: anywhere }
+.vend { font: 700 10px/1 var(--f-body); letter-spacing: .08em; text-transform: uppercase; padding: 3px 6px; border-radius: 4px;
+  color: var(--surface); background: var(--v-nvidia) }
+.vend.amd { background: var(--v-amd) }
+.state { font: 600 11.5px/1 var(--f-body); white-space: nowrap }
+.state.Healthy { color: var(--good) } .state.Suspect { color: var(--warn) } .state.Quarantined { color: var(--crit) }
+.state.Learning { color: var(--accent) } .state.Starting, .state.Free, .state.Unused { color: var(--idle) }
+
+/* view 1: discovery lanes */
+.cols { display: grid; grid-template-columns: minmax(0,1fr) 56px minmax(0,1fr) 72px minmax(0,1.05fr); }
+.cols .label { padding-left: 2px }
+.lanes { display: grid; gap: 14px }
+.lane { position: relative; display: grid; grid-template-columns: minmax(0,1fr) 56px minmax(0,1fr) 72px minmax(0,1.05fr);
+  row-gap: 10px; padding: 12px; border-radius: 12px; background: var(--sunk) }
+.lane > svg.wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: visible }
+.lane .c1 { grid-column: 1 } .lane .c3 { grid-column: 3 } .lane .c5 { grid-column: 5; align-self: center }
+.grp { border-width: 2px; border-color: var(--accent) }
+.grp h3 { overflow-wrap: anywhere }
+.grp .count { font: 700 22px/1 var(--f-display); font-variant-numeric: tabular-nums }
+.dots { display: flex; gap: 4px; margin-top: 6px } .dots i { width: 14px; height: 6px; border-radius: 3px; background: var(--line) }
+.dots i.on { background: var(--good) }
+.lane.idle { background: transparent; border: 1px dashed var(--line) }
+.wire { fill: none; stroke: var(--wire); stroke-width: 2 }
+.wire.Healthy { stroke: var(--good) } .wire.Suspect { stroke: var(--warn) } .wire.Quarantined { stroke: var(--crit); stroke-dasharray: 5 5 }
+.wire.Starting { stroke-dasharray: 4 5 } .wire.Learning { stroke: var(--accent) }
+.wire.flow { stroke-dasharray: 2 8; stroke-linecap: round; stroke-width: 3; animation: march 1s linear infinite }
+@keyframes march { to { stroke-dashoffset: -20 } }
+.empty { color: var(--muted); padding: 18px; text-align: center; border: 1px dashed var(--line); border-radius: 12px }
+
+/* view 2: pipeline */
+.pipe { display: grid; grid-template-columns: minmax(150px,1fr) 44px minmax(140px,1fr) 44px minmax(170px,1.2fr) 44px minmax(160px,1.1fr) 44px minmax(140px,1fr);
+  align-items: center; row-gap: 8px }
+.pipe .blk { padding: 11px 13px; display: grid; gap: 4px; align-self: stretch; align-content: start }
+.pipe .blk.active { border-color: var(--accent) }
+.pipe .blk.alert { border-color: var(--crit); background: var(--crit-soft) }
+.pipe .big { font: 700 24px/1.1 var(--f-display); font-variant-numeric: tabular-nums }
+.pipe .big small { font: 500 12px var(--f-body); color: var(--muted); margin-left: 4px }
+.pipe .role { font-size: 12px; color: var(--muted) }
+.pipe .now { font-size: 12.5px; border-top: 1px solid var(--line); padding-top: 6px; margin-top: 2px; overflow-wrap: anywhere }
+.srcs { display: grid; gap: 8px; align-self: stretch }
+.srcs .blk { align-self: auto }
+.flow { position: relative; height: 2px; background: var(--wire); margin: 0 4px }
+.flow::after { content: ""; position: absolute; right: -2px; top: -4px; border: 5px solid transparent; border-left: 7px solid var(--wire); border-right: 0 }
+.flow i { position: absolute; top: -3px; left: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); opacity: 0 }
+.flow.on i { animation: dot 1.4s linear infinite; opacity: 1 } .flow.on i:nth-child(2) { animation-delay: .7s }
+@keyframes dot { from { left: 0 } to { left: calc(100% - 8px) } }
+.flow-label { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); font-size: 10.5px; color: var(--muted); white-space: nowrap }
+.gpus-row { grid-column: 5; display: grid; gap: 6px; justify-items: center }
+.vflow { width: 2px; height: 22px; background: var(--wire); position: relative }
+.vflow::before, .vflow::after { content: ""; position: absolute; left: -4px; border: 5px solid transparent }
+.vflow::before { top: -6px; border-bottom: 6px solid var(--wire); border-top: 0 }
+.vflow::after { bottom: -6px; border-top: 6px solid var(--wire); border-bottom: 0 }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center }
+.chip { font: 600 12px/1 var(--f-body); padding: 6px 8px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface) }
+.chip.used { border-color: var(--accent); background: var(--accent-soft) }
+.chip.Quarantined { border-color: var(--crit); color: var(--crit); text-decoration: line-through }
+
+/* view 3: detector */
+.tabs { display: flex; flex-wrap: wrap; gap: 6px }
+.verdict { padding: 12px 14px; border-radius: var(--radius); background: var(--good-soft); font-size: 15px }
+.verdict.warn { background: var(--warn-soft) } .verdict.crit { background: var(--crit-soft) } .verdict.info { background: var(--accent-soft) }
+.det { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 14px }
+.panel { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: grid; gap: 8px; min-width: 0; align-content: start }
+.panel-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap }
+svg.chart { width: 100%; height: auto; display: block; font-family: var(--f-body) }
+svg.chart text { fill: var(--muted); font-size: 11px }
+svg.chart .band-h { fill: var(--good-soft) } svg.chart .band-s { fill: var(--warn-soft) } svg.chart .band-q { fill: var(--crit-soft) }
+svg.chart .grid { stroke: var(--line); stroke-width: 1 }
+svg.chart .thr { stroke-width: 1.5; stroke-dasharray: 5 4 }
+svg.chart .line { fill: none; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round }
+svg.chart .end { font-weight: 600; font-size: 11.5px }
+svg.graph text { font-family: var(--f-body); font-size: 11.5px; fill: var(--fg) }
+svg.graph .edge { stroke-width: 4; stroke-linecap: round }
+svg.graph .elabel { font: 600 11px var(--f-mono); }
+svg.graph .halo { fill: var(--surface) }
+.baselines { display: grid; gap: 8px }
+.bl { display: grid; gap: 4px }
+.prog { height: 6px; border-radius: 3px; background: var(--sunk); overflow: hidden } .prog i { display: block; height: 100%; background: var(--accent) }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums }
+th, td { text-align: left; padding: 7px 9px; border-bottom: 1px solid var(--line); vertical-align: top }
+th { font: 600 11px var(--f-body); letter-spacing: .07em; text-transform: uppercase; color: var(--muted) }
+tr.high td { background: var(--crit-soft) }
+.tablewrap { overflow-x: auto; max-width: 100% }
+#vendor, #det, #pipe, #lanes { min-width: 0; max-width: 100% }
+.chk { font-weight: 600 } .chk.ok { color: var(--good) } .chk.hi { color: var(--crit) } .chk.lrn { color: var(--accent) }
+
+/* log */
+details.log summary { cursor: pointer; font: 600 15px var(--f-display) }
+.events { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; max-height: 340px; overflow: auto }
+.events li { display: grid; grid-template-columns: 76px 1fr; gap: 10px; font-size: 13px }
+.events time { font: 500 12px var(--f-mono); color: var(--muted) }
+
+.cost-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px }
+.cost-grid > div { display: grid; gap: 2px; padding: 10px 12px; background: var(--sunk); border-radius: 10px }
+.cost-grid b { font: 700 20px/1.2 var(--f-display); font-variant-numeric: tabular-nums }
+#cost { min-width: 0 }
+/* view 5: incidents */
+.inc { border: 1px solid var(--line); border-left-width: 4px; border-radius: 12px; padding: 12px 14px; display: grid; gap: 8px }
+.inc.open { border-left-color: var(--crit) } .inc.val { border-left-color: var(--accent) } .inc.done { border-left-color: var(--good) }
+.inc-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; align-items: baseline }
+.inc-steps { display: flex; flex-wrap: wrap; gap: 6px }
+.inc-steps span { font: 600 11.5px/1 var(--f-body); padding: 5px 8px; border-radius: 999px; background: var(--sunk); color: var(--muted) }
+.inc-steps span.on { background: var(--accent-soft); color: var(--accent) } .inc-steps span.bad { background: var(--crit-soft); color: var(--crit) }
+.inc-steps span.ok { background: var(--good-soft); color: var(--good) }
+.inc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px }
+.inc-grid > div { background: var(--sunk); border-radius: 10px; padding: 10px 12px; font-size: 13px; overflow-wrap: anywhere }
+.inc ol { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--muted) }
+.inc code { font: 500 12px var(--f-mono); background: var(--sunk); padding: 2px 6px; border-radius: 4px; overflow-wrap: anywhere }
+#incidents { min-width: 0 }
+/* view 4: vendor tools vs Dual-Key */
+.vs-head { display: grid; grid-template-columns: 1fr 1fr; gap: 12px }
+.vs-card { border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px }
+.vs-card .big { font: 700 20px/1.2 var(--f-display) }
+.vs-card.ok { background: var(--good-soft) } .vs-card.err { background: var(--crit-soft) } .vs-card.unk { background: var(--idle-soft) }
+.vs-card.warn { background: var(--warn-soft) }
+.verdict-cell { font-weight: 600; white-space: nowrap }
+.verdict-cell.ok { color: var(--good) } .verdict-cell.err { color: var(--crit) } .verdict-cell.unk { color: var(--idle) } .verdict-cell.warn { color: var(--warn) }
+td.metrics { font-size: 12.5px; color: var(--muted) }
+td.metrics b { color: var(--fg); font-weight: 600 }
+tr.contrast td { background: var(--warn-soft) }
+@media (max-width: 720px) { .vs-head { grid-template-columns: 1fr } }
+@media (max-width: 1020px) {
+  .pipe { grid-template-columns: 1fr; justify-items: stretch }
+  .pipe > .flow { width: 2px; height: 26px; margin: 2px auto; }
+  .pipe > .flow::after { right: auto; left: -4px; top: auto; bottom: -2px; border: 5px solid transparent; border-top: 7px solid var(--wire); border-bottom: 0 }
+  .pipe > .flow i { left: -3px; top: 0 }
+  .pipe > .flow.on i { animation-name: vdot }
+  .pipe > .flow .flow-label { top: 50%; left: 12px; transform: translateY(-50%) }
+  .gpus-row { grid-column: 1; grid-row: auto }
+  .det { grid-template-columns: 1fr }
+}
+@keyframes vdot { from { top: 0 } to { top: calc(100% - 8px) } }
+@media (max-width: 720px) {
+  .cols { display: none }
+  .lane { grid-template-columns: 1fr; }
+  .lane .c1, .lane .c3, .lane .c5 { grid-column: 1 !important; grid-row: auto !important }
+  .lane .c5 { order: -1 }
+  .lane > svg.wires { display: none }
+  .lane .c3 { margin-left: 18px; margin-bottom: 4px }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wire.flow, .flow.on i { animation: none }
+}
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="title"><h1>Dual-Key</h1><span class="muted" id="sub"></span><span class="pill" id="phase">Connecting</span></div>
+      <p class="headline" id="headline">Connecting to the cluster…</p>
+    </div>
+    <div class="muted small" id="updated"></div>
+  </header>
+
+  <div class="demo-banner" id="demo" hidden>
+    <span><b>Demo data.</b> A scripted run of a 3-GPU cluster: discovery, reference model, learning, then a faulty T4 gets caught.</span>
+    <button type="button" id="restart">Restart demo</button>
+  </div>
+  <div class="error" id="err" hidden></div>
+
+  <section class="view" aria-labelledby="v1">
+    <div class="view-head"><span class="num">1</span><div>
+      <h2 id="v1">What Dual-Key found</h2>
+      <p>Every GPU node in the cluster, the model server running on it, and the comparison group it was placed in. Servers running the same model join one group, and a group starts checking once it has 3 ready members.</p>
+    </div></div>
+    <div class="legend">
+      <span><i style="border-color:var(--good)"></i>healthy</span><span><i style="border-color:var(--accent)"></i>learning</span>
+      <span><i style="border-color:var(--warn)"></i>suspect</span><span><i style="border-color:var(--crit);border-top-style:dashed"></i>quarantined</span>
+      <span><i style="border-color:var(--wire);border-top-style:dashed"></i>starting / not ready</span>
+    </div>
+    <div class="cols" aria-hidden="true"><span class="label">GPU node</span><span></span><span class="label">Model server</span><span></span><span class="label">Comparison group</span></div>
+    <div class="lanes" id="lanes"></div>
+  </section>
+
+  <section class="view" aria-labelledby="v2">
+    <div class="view-head"><span class="num">2</span><div>
+      <h2 id="v2">What each part is doing</h2>
+      <p>Test prompts (and optionally real app traffic) are answered by one GPU, queued, re-scored by a different GPU in the same group, and the gap goes to the Detector. Numbers are for the last minute.</p>
+    </div></div>
+    <div class="pipe" id="pipe"></div>
+    <div id="cost"></div>
+  </section>
+
+  <section class="view" aria-labelledby="v3">
+    <div class="view-head"><span class="num">3</span><div>
+      <h2 id="v3">What the Detector sees</h2>
+      <p>Each GPU gets a score: how far its disagreements with its partners are above normal, in standard deviations. A GPU is flagged only when it disagrees with every partner, so one bad checker can't get a good GPU quarantined.</p>
+    </div></div>
+    <div class="tabs" id="tabs"></div>
+    <div id="det"></div>
+  </section>
+
+  <section class="view" aria-labelledby="v4">
+    <div class="view-head"><span class="num">4</span><div>
+      <h2 id="v4">Dual-Key vs the vendor's own monitoring</h2>
+      <p>For each GPU: what NVIDIA's DCGM (or AMD's metrics exporter) and node health tools such as NVSentinel report, next to what Dual-Key concluded. Silent data corruption is the case where the vendor tools stay green while the answers are wrong.</p>
+    </div></div>
+    <div id="vendor"></div>
+  </section>
+
+  <section class="view" aria-labelledby="v5">
+    <div class="view-head"><span class="num">5</span><div>
+      <h2 id="v5">Incidents and response</h2>
+      <p>Every quarantine opens an incident: the evidence, what the vendor tools and the vendor's own diagnostic said about the node, what was done to the node, and the re-check after release.</p>
+    </div></div>
+    <div id="incidents"></div>
+  </section>
+
+  <section class="view">
+    <details class="log" id="logbox">
+      <summary>Discovery log</summary>
+      <ul class="events" id="events"></ul>
+    </details>
+  </section>
+</div>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const cache = {};
+  const setHTML = (el, html) => { if (cache[el.id] !== html) { el.innerHTML = html; cache[el.id] = html; return true; } return false; };
+  const fmt = (x, d = 1) => (x === null || x === undefined || Number.isNaN(x)) ? "–" : Number(x).toFixed(d);
+  const ago = (ts, now) => { const s = Math.max(0, Math.round(now - ts)); return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`; };
+  const hhmm = (t) => { const d = typeof t === "number" ? new Date(t * 1000) : new Date(t); return isNaN(d) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }); };
+  const shortNode = (n) => String(n || "").split(".")[0];
+  const shortProduct = (p) => String(p || "").replace(/^(NVIDIA|Tesla|AMD|Instinct)[-_ ]?/i, "").replace(/[-_]/g, " ").replace(/\s*(PCIe|SXM\d?|Tensor Core GPU)$/i, "").trim();
+  const SERIES = ["var(--s1)", "var(--s2)", "var(--s3)", "var(--s4)", "var(--s5)", "var(--s6)"];
+  let S = null, selected = null, windowMin = 15;
+
+  // ------------------------------------------------------------ model of what to draw
+  function model(S) {
+    const nodes = new Map((S.nodes || []).map((n) => [n.name, n]));
+    const rec = new Map();
+    for (const r of S.records || []) rec.set(r.spec.gpu || r.name, r);
+    const scorerMembers = {};
+    for (const g of Object.values(S.scorer || {})) Object.assign(scorerMembers, g.members || {});
+    const groups = (S.groups || []).map((g) => {
+      const members = (g.status.members || []).map((m) => {
+        const r = rec.get(m.name);
+        const node = nodes.get(m.node) || [...nodes.values()].find((n) => n.short === shortNode(m.node));
+        if (!node && m.node) nodes.set(m.node, { name: m.node, short: shortNode(m.node), vendor: m.vendor, product: "", gpus: 1, synthetic: true });
+        const st = (r && r.status.state) || (scorerMembers[m.name] || {}).state;
+        const state = !m.ready ? "Starting" : (st || "Learning");
+        const score = r && r.status.score !== undefined ? r.status.score : (scorerMembers[m.name] || {}).score;
+        return { ...m, state, score, checks: (r && r.status.checks) || 0, nodeInfo: node || nodes.get(m.node) };
+      });
+      return { name: g.name, spec: g.spec, status: g.status, members };
+    });
+    const label = {};
+    const all = groups.flatMap((g) => g.members);
+    for (const m of all) {
+      const p = shortProduct(m.nodeInfo && m.nodeInfo.product);
+      label[m.name] = p || m.name;
+    }
+    const counts = {};
+    for (const v of Object.values(label)) counts[v] = (counts[v] || 0) + 1;
+    for (const m of all) if (counts[label[m.name]] > 1) label[m.name] = `${label[m.name]} · ${shortNode(m.node).replace(/^ip-/, "")}`;
+    const used = new Set(all.map((m) => m.nodeInfo && m.nodeInfo.name).filter(Boolean));
+    const skipped = (S.cluster.discovery || {}).skipped || [];
+    const placements = (((S.cluster.discovery || {}).reference) || {}).placements || [];
+    const free = [...nodes.values()].filter((n) => !used.has(n.name));
+    return { groups, label, free, skipped, placements, nodes };
+  }
+  const L = (M, name) => M.label[name] || name;
+
+  // ------------------------------------------------------------ header
+  function header(S, M) {
+    const c = S.cluster;
+    $("sub").textContent = `${c.name || "no DualKeyCluster"} · ${c.mode} mode`;
+    const all = M.groups.flatMap((g) => g.members);
+    const q = all.filter((m) => m.state === "Quarantined"), s = all.filter((m) => m.state === "Suspect");
+    const checking = M.groups.filter((g) => g.status.phase === "Ready" || g.status.phase === "Checking");
+    let cls = "info", text = c.phase;
+    if (q.length) { cls = "crit"; text = `${q.length} quarantined`; }
+    else if (s.length) { cls = "warn"; text = `${s.length} suspect`; }
+    else if (checking.length && all.some((m) => m.state === "Healthy")) { cls = "good"; text = "All healthy"; }
+    $("phase").className = `pill ${cls}`; $("phase").textContent = text;
+    let h;
+    if (!c.name) h = "No DualKeyCluster found in this namespace. Create one to start.";
+    else if (q.length) h = `${q.map((m) => L(M, m.name)).join(", ")} quarantined: answers disagreed with every partner.`;
+    else if (s.length) h = `${s.map((m) => L(M, m.name)).join(", ")} under suspicion; waiting for more checks to confirm.`;
+    else if (checking.length) {
+      const n = checking.reduce((a, g) => a + g.members.filter((m) => m.ready).length, 0);
+      const learning = checking.some((g) => g.members.some((m) => m.state === "Learning"));
+      h = `Checking ${n} GPUs in ${checking.length} ${checking.length === 1 ? "group" : "groups"}. ${learning ? "Still learning what normal looks like." : "All answers agree within the normal range."}`;
+    } else h = c.message || "Scanning the cluster for model servers on GPUs…";
+    $("headline").textContent = h;
+    const last = (c.discovery || {}).lastScan;
+    $("updated").textContent = last ? `Last scan ${hhmm(last)}` : "";
+  }
+
+  // ------------------------------------------------------------ view 1: discovery diagram
+  function nodeBlock(n, id, extra = "") {
+    if (!n) return `<div class="blk c1" id="${id}"><b>unknown node</b></div>`;
+    const prod = shortProduct(n.product) || (n.synthetic ? "GPU" : "GPU");
+    return `<div class="blk c1" id="${id}" ${extra}>
+      <div class="top"><b>${esc(prod)}</b><span class="vend ${esc(n.vendor)}">${esc(n.vendor)}</span></div>
+      <div class="meta mono">${esc(n.short || shortNode(n.name))}</div>
+      <div class="meta">${[n.instanceType, n.zone, n.gpus ? `${n.gpus} GPU` : ""].filter(Boolean).map(esc).join(" · ")}${n.tainted ? ' · <b class="state Quarantined">tainted</b>' : ""}</div>
+    </div>`;
+  }
+  function shortSha(x) { const v = String(x || "").replace(/^sha256:/, ""); return v ? v.slice(0, 8) : ""; }
+  function buildLine(b) {
+    if (!b) return "";
+    const parts = [b.vllm ? `vLLM ${b.vllm}` : "", b.driver ? `driver ${b.driver}` : "", b.imageDigest ? `image ${shortSha(b.imageDigest)}` : ""].filter(Boolean);
+    return parts.length ? `<div class="meta mono" title="${esc(b.image || "")}">${esc(parts.join(" · "))}</div>` : "";
+  }
+  function identityLines(id) {
+    const parts = [id.revision ? `revision ${String(id.revision).slice(0, 10)}` : "", id.modelSha ? `weights ${shortSha(id.modelSha)}` : "",
+      id.tokenizer ? `tokenizer ${id.tokenizer}` : "", id.vllm ? `vLLM ${id.vllm}` : ""].filter(Boolean);
+    return parts.length ? `<div class="meta mono" style="margin-top:4px" title="Every member must match all of these">same build: ${esc(parts.join(" · "))}</div>` : "";
+  }
+  function lanes(S, M) {
+    const wires = [];
+    let html = "";
+    M.groups.forEach((g, gi) => {
+      const n = Math.max(1, g.members.length);
+      const ready = g.members.filter((m) => m.ready).length;
+      const need = 3;
+      const det = ((S.cluster.detection || {}).groups || {})[g.name];
+      const phaseLabel = g.status.phase === "Ready" || g.status.phase === "Checking"
+        ? (det ? (det.phase === "Detecting" ? "Checking" : "Learning") : "Checking") : (g.status.phase || "Forming");
+      const pcls = phaseLabel === "Checking" ? "good" : phaseLabel === "Learning" ? "info" : "warn";
+      let rows = "";
+      g.members.forEach((m, i) => {
+        const nid = `n-${gi}-${i}`, sid = `s-${gi}-${i}`;
+        rows += nodeBlock(m.nodeInfo, nid, `style="grid-row:${i + 1}"`);
+        rows += `<div class="blk c3" id="${sid}" data-state="${esc(m.state)}" style="grid-row:${i + 1}">
+          <div class="top"><b>${esc(L(M, m.name))}</b><span class="state ${esc(m.state)}">${esc(m.state === "Starting" ? "not ready" : m.state)}</span></div>
+          <div class="meta mono">${esc(m.managed ? "reference model" : `${m.namespace || ""}/${m.pod || m.name}`)}</div>
+          <div class="meta">${m.ready ? `score ${fmt(m.score, 1)} · ${m.checks} checks` : esc(m.reason || "starting")}</div>
+          ${buildLine(m.build)}
+        </div>`;
+        wires.push([nid, sid, m.state, false], [sid, `g-${gi}`, m.state, phaseLabel === "Checking" || phaseLabel === "Learning"]);
+      });
+      const model = g.spec.modelId || "";
+      rows += `<div class="blk grp c5" id="g-${gi}" style="grid-row:1 / span ${n}">
+        <div class="top"><span class="label">${g.spec.source === "reference" ? "Reference group" : "Discovered group"}</span><span class="pill ${pcls}">${esc(phaseLabel)}</span></div>
+        <h3 style="margin-top:6px">${esc(model)}</h3>
+        <div class="meta">${esc([g.spec.dtype, g.spec.quantization, g.spec.tp ? `tp ${g.spec.tp}` : ""].filter(Boolean).join(" · "))}</div>
+        ${identityLines(g.status.identity || g.spec.identity || {})}
+        ${(g.status.split || []).length ? `<div class="meta" style="margin-top:4px;color:var(--warn)">Kept apart from other servers of this model: ${esc(g.status.split.join("; "))}</div>` : ""}
+        <div style="margin-top:8px"><span class="count">${ready}</span> <span class="muted">of ${g.members.length} ready · needs ${need}</span></div>
+        <div class="dots">${Array.from({ length: Math.max(need, g.members.length) }, (_, i) => `<i class="${i < ready ? "on" : ""}"></i>`).join("")}</div>
+        ${g.status.message && phaseLabel !== "Checking" && phaseLabel !== "Learning" ? `<div class="meta" style="margin-top:6px">${esc(g.status.message)}</div>` : ""}
+      </div>`;
+      html += `<div class="lane" data-lane="${gi}"><svg class="wires" aria-hidden="true"></svg>${rows}</div>`;
+    });
+    // GPUs not in any group
+    const idle = [];
+    M.free.forEach((n, i) => {
+      const sk = M.skipped.find((s) => s.node === n.name || shortNode(s.node) === n.short);
+      const why = sk ? `GPU used by ${sk.namespace}/${sk.pod}: ${sk.reason}` : "free: no model server on this GPU";
+      idle.push(nodeBlock(n, `f-${i}`, `style="grid-row:${i + 1}"`) +
+        `<div class="blk c3" style="grid-row:${i + 1};grid-column:3 / span 3" data-state="Starting"><div class="top"><b>Not checked</b><span class="state ${sk ? "Unused" : "Free"}">${sk ? "skipped" : "free"}</span></div><div class="meta">${esc(why)}</div></div>`);
+    });
+    if (idle.length) html += `<div class="lane idle"><div class="label" style="grid-column:1 / -1">GPU nodes not in any group</div>${idle.join("")}</div>`;
+    if (!html) html = `<div class="empty">${(S.nodes || []).length ? "GPU nodes found; waiting for the first discovery scan…" : "No GPU nodes found yet. The operator scans every 30 seconds."}</div>`;
+    const changed = setHTML($("lanes"), html);
+    if (changed || !lanes.drawn) { lanes.wires = wires; requestAnimationFrame(drawWires); lanes.drawn = true; }
+  }
+  function drawWires() {
+    for (const lane of document.querySelectorAll(".lane[data-lane]")) {
+      const svg = lane.querySelector("svg.wires");
+      const box = lane.getBoundingClientRect();
+      let p = "";
+      for (const [a, b, state, flow] of lanes.wires || []) {
+        const A = lane.querySelector(`#${a}`), B = lane.querySelector(`#${b}`);
+        if (!A || !B) continue;
+        const ra = A.getBoundingClientRect(), rb = B.getBoundingClientRect();
+        const x1 = ra.right - box.left, y1 = ra.top + ra.height / 2 - box.top;
+        const x2 = rb.left - box.left, y2 = rb.top + rb.height / 2 - box.top;
+        const mx = (x1 + x2) / 2;
+        const d = `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+        p += `<path class="wire ${state}" d="${d}"/>`;
+        if (flow && state !== "Quarantined" && state !== "Starting") p += `<path class="wire flow ${state}" d="${d}"/>`;
+      }
+      svg.innerHTML = p;
+    }
+  }
+  window.addEventListener("resize", () => requestAnimationFrame(drawWires));
+
+  // ------------------------------------------------------------ view 2: pipeline
+  function pipeline(S, M) {
+    const P = S.pipeline || {};
+    const all = M.groups.flatMap((g) => g.members);
+    const quarantined = all.filter((m) => m.state === "Quarantined");
+    const suspects = all.filter((m) => m.state === "Suspect");
+    const groupsChecking = M.groups.filter((g) => g.members.filter((m) => m.ready).length >= 3);
+    const probeOn = (P.probeLastMinute || 0) > 0, gwOn = (P.gatewayLastMinute || 0) > 0, chkOn = (P.lastMinute || 0) > 0;
+    const last = P.last;
+    const scorers = Object.values(S.scorer || {});
+    const bls = scorers.flatMap((g) => Object.values(g.baselines || {}));
+    const blReady = bls.filter((b) => b.ready).length;
+    const learning = bls.length === 0 || blReady < bls.length;
+    const target = (scorers[0] && scorers[0].settings && scorers[0].settings.baseline_samples) || 200;
+    const pct = bls.length ? Math.round(100 * Math.min(1, bls.reduce((a, b) => a + Math.min(b.samples, target), 0) / (bls.length * target))) : 0;
+    const err = P.error ? `<div class="now" style="color:var(--crit)">${esc(P.error)}</div>` : "";
+    const lastGroup = last ? M.groups.find((g) => g.name === last.group) : groupsChecking[0];
+    const chips = (lastGroup ? lastGroup.members : []).map((m) => {
+      const used = last && (m.name === last.primary || m.name === last.checker);
+      return `<span class="chip ${used ? "used" : ""} ${m.state}">${esc(L(M, m.name))}</span>`;
+    }).join("");
+    const html = `
+      <div class="srcs">
+        <div class="blk ${probeOn ? "active" : ""}">
+          <h3>Prober</h3><div class="role">Sends harmless test prompts to each group's GPUs</div>
+          <div class="big">${P.probeLastMinute ?? 0}<small>answers/min</small></div>
+          <div class="now">${groupsChecking.length ? `${fmt(S.cluster.probeRate, 1)} prompt/s to ${groupsChecking.length} ${groupsChecking.length === 1 ? "group" : "groups"}` : "waiting for a group with 3 ready GPUs"}</div>
+        </div>
+        <div class="blk ${gwOn ? "active" : ""}">
+          <h3>Gateway</h3><div class="role">Optional: samples ${Math.round((S.cluster.sampleRate || 0.05) * 100)}% of real app traffic</div>
+          <div class="big">${P.gatewayLastMinute ?? 0}<small>samples/min</small></div>
+          <div class="now">${gwOn ? "apps are routed through it" : "idle: no apps are sending traffic through it"}</div>
+        </div>
+      </div>
+      <div class="flow ${probeOn || gwOn ? "on" : ""}"><i></i><i></i><span class="flow-label">answers</span></div>
+      <div class="blk ${(P.verifyWaiting || 0) > 0 ? "active" : ""}">
+        <h3>Queue</h3><div class="role">Holds answers waiting to be re-scored</div>
+        <div class="big">${P.verifyWaiting ?? 0}<small>waiting</small></div>
+        <div class="now">${(P.verifyWaiting || 0) > 100 ? "backlog: verifiers are behind" : "keeping up"}${P.verifyTotal ? ` · ${P.verifyTotal.toLocaleString()} queued in total` : ""}</div>${err}
+      </div>
+      <div class="flow ${chkOn ? "on" : ""}"><i></i><i></i><span class="flow-label">to check</span></div>
+      <div class="blk ${chkOn ? "active" : ""}">
+        <h3>Verifier</h3><div class="role">Has a different GPU re-score each answer and measures the gap</div>
+        <div class="big">${P.lastMinute ?? 0}<small>checks/min</small></div>
+        <div class="now">${last ? `Last: <b>${esc(L(M, last.primary))}</b>'s answer re-scored by <b>${esc(L(M, last.checker))}</b>, gap ${fmt(last.gap, 4)}` : "no checks yet"}</div>
+      </div>
+      <div class="flow ${chkOn ? "on" : ""}"><i></i><i></i><span class="flow-label">gaps</span></div>
+      <div class="blk ${suspects.length ? "alert" : chkOn ? "active" : ""}">
+        <h3>Detector</h3><div class="role">Compares each gap with normal and scores every GPU</div>
+        <div class="big">${learning ? `${pct}%<small>learned</small>` : `${all.filter((m) => m.state === "Healthy").length}<small>healthy</small>`}</div>
+        <div class="now">${learning ? "learning normal disagreement" : `detecting · ${suspects.length} suspect`} · ${blReady}/${bls.length || 0} baselines${P.resultsWaiting ? ` · ${P.resultsWaiting} gaps waiting` : ""}</div>
+      </div>
+      <div class="flow ${quarantined.length ? "on" : ""}"><i></i><i></i><span class="flow-label">flags</span></div>
+      <div class="blk ${quarantined.length ? "alert" : ""}">
+        <h3>Quarantine</h3><div class="role">Flagged GPUs taken out of routing; node tainted</div>
+        <div class="big">${quarantined.length}<small>${quarantined.length === 1 ? "GPU" : "GPUs"}</small></div>
+        <div class="now">${quarantined.length ? quarantined.map((m) => `<b>${esc(L(M, m.name))}</b> on ${esc(shortNode(m.node))}`).join("<br>") : "empty: no GPU flagged"}</div>
+      </div>
+      <div class="gpus-row" ${chips ? "" : "hidden"}>
+        <div class="vflow" aria-hidden="true"></div>
+        <div class="label">GPUs that answer and re-score${last ? " · last check highlighted" : ""}</div>
+        <div class="chips">${chips}</div>
+      </div>`;
+    setHTML($("pipe"), html);
+    costView(S, M);
+  }
+
+  function costView(S, M) {
+    const O = S.overhead || {};
+    if (!O.checks) { setHTML($("cost"), `<div class="panel"><h3>What checking costs</h3><p class="small muted">Measured from real checks once checking runs.</p></div>`); return; }
+    const ms = (x) => x === null || x === undefined ? "–" : x < 1 ? `${Math.round(x * 1000)} ms` : `${fmt(x, 2)} s`;
+    const usd = (x) => x === null || x === undefined ? "–" : `$${x < 0.01 ? x.toFixed(4) : x.toFixed(2)}`;
+    const busy = Object.entries(O.checkerBusyPct || {}).map(([k, v]) => `${esc(L(M, k))} ${fmt(v, 1)}%`).join(" · ");
+    setHTML($("cost"), `<div class="panel">
+      <div class="panel-head"><h3>What checking costs</h3><span class="small muted">last ${Math.round((O.windowSeconds || 0) / 60) || 1} min · ${O.checks} checks · ${fmt(O.checksPerMinute, 0)}/min</span></div>
+      <div class="cost-grid">
+        <div><span class="label">Re-score time</span><b>${ms(O.rescoreP50)}</b><span class="small muted">p50 · p95 ${ms(O.rescoreP95)}</span></div>
+        <div><span class="label">Wait in queue</span><b>${ms(O.queueP50)}</b><span class="small muted">p50 · p95 ${ms(O.queueP95)}</span></div>
+        <div><span class="label">Check vs answer</span><b>${O.checkVsAnswer ? `${Math.round(O.checkVsAnswer * 100)}%` : "–"}</b><span class="small muted">of the time to produce the answer (${ms(O.answerP50)})</span></div>
+        <div><span class="label">Per 1,000 checks</span><b>${usd(O.costPer1000Checks)}</b><span class="small muted">${O.scoredTokensAvg} tokens scored per check</span></div>
+        <div><span class="label">Per 1,000 app requests</span><b>${usd(O.costPer1000Requests)}</b><span class="small muted">at ${Math.round((O.sampleRate || 0) * 100)}% sampled, ${fmt(O.checksPerSample, 1)} check(s) each</span></div>
+      </div>
+      <p class="small muted">Checker GPU time used by Dual-Key: ${busy || "–"}. Prices: ${esc(O.priceSource || "")}. ${esc(O.note || "")}.</p>
+    </div>`);
+  }
+
+  // ------------------------------------------------------------ view 3: detector
+  function detector(S, M) {
+    const names = M.groups.map((g) => g.name);
+    if (!names.includes(selected)) selected = (M.groups.find((g) => (S.scorer || {})[g.name]) || M.groups[0] || {}).name;
+    setHTML($("tabs"), M.groups.length > 1 ? M.groups.map((g) =>
+      `<button type="button" data-g="${esc(g.name)}" aria-pressed="${g.name === selected}">${esc(g.spec.modelId || g.name)} (${g.members.length})</button>`).join("") : "");
+    const g = M.groups.find((x) => x.name === selected);
+    if (!g) { setHTML($("det"), `<div class="empty">Nothing to score yet. Scores appear once a group has 3 ready GPUs.</div>`); return; }
+    const sc = (S.scorer || {})[g.name] || { baselines: {}, pairs: {}, members: {}, settings: {} };
+    const th = S.cluster.thresholds || { suspect: 3, quarantine: 5 };
+    const set = sc.settings || {};
+    const ready = g.members.filter((m) => m.ready);
+    const color = {}; g.members.forEach((m, i) => color[m.name] = SERIES[i % SERIES.length]);
+
+    // verdict
+    const q = ready.filter((m) => m.state === "Quarantined"), s = ready.filter((m) => m.state === "Suspect");
+    const bls = Object.entries(sc.baselines || {});
+    const learningBl = bls.filter(([, b]) => !b.ready);
+    let vcls = "", vtext;
+    if (ready.length < 3) { vcls = "info"; vtext = `Waiting for 3 ready GPUs (${ready.length} so far). Nothing is scored until then.`; }
+    else if (!bls.length || learningBl.length) {
+      vcls = "info";
+      const parts = (learningBl.length ? learningBl : bls).map(([k, b]) => `${k.replace("|", " ↔ ")} ${b.samples}/${set.baseline_samples || 200}`);
+      vtext = `Learning what normal disagreement looks like${parts.length ? `: ${parts.join(", ")} checks` : ""}. No GPU can be flagged while learning.`;
+    } else if (q.length) {
+      vcls = "crit";
+      const rest = ready.filter((m) => m.state !== "Quarantined");
+      vtext = `<b>${q.map((m) => esc(L(M, m.name))).join(", ")}</b> quarantined: it disagreed with every partner (score ${fmt(q[0].score, 1)}, limit ${th.quarantine}).` +
+        (rest.length < 3 ? ` The remaining ${rest.length} GPUs can't be scored until another GPU joins the group.` : "");
+    } else if (s.length) {
+      vcls = "warn";
+      vtext = `<b>${s.map((m) => esc(L(M, m.name))).join(", ")}</b> disagrees with all its partners (score ${fmt(s[0].score, 1)}). If it stays above ${th.quarantine} for ${set.confirm_checks || 10} more checks it will be quarantined.`;
+    } else {
+      const top = ready.filter((m) => m.score !== null && m.score !== undefined).sort((a, b) => b.score - a.score)[0];
+      vtext = `All ${ready.length} GPUs agree within the normal range.${top ? ` Highest score: ${fmt(top.score, 1)} (${esc(L(M, top.name))}); suspect at ${th.suspect}.` : ""}`;
+    }
+
+    const html = `
+      <div class="verdict ${vcls}">${vtext}</div>
+      <div class="det">
+        <div class="panel">
+          <div class="panel-head"><h3>Score drift per GPU</h3>
+            <div class="tabs"><button type="button" data-w="15" aria-pressed="${windowMin === 15}">15 min</button><button type="button" data-w="60" aria-pressed="${windowMin === 60}">1 hour</button></div></div>
+          ${chart(S, M, g, color, th)}
+          <div class="legend">${g.members.map((m) => `<span><i style="border-color:${color[m.name]}"></i>${esc(L(M, m.name))}</span>`).join("")}
+            <span><i style="border-color:var(--warn);border-top-style:dashed"></i>suspect ${th.suspect}</span><span><i style="border-color:var(--crit);border-top-style:dashed"></i>quarantine ${th.quarantine}</span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>Who agrees with whom</h3></div>
+          ${graph(M, g, sc, th, color)}
+          <p class="small muted">Each line is a pair of GPUs; the number is how unusual their disagreement is (σ above normal). A faulty GPU shows red lines to every partner while the other pairs stay green.</p>
+        </div>
+      </div>
+      <div class="det">
+        <div class="panel">
+          <div class="panel-head"><h3>Latest checks</h3><span class="small muted">gap = token likelihood divergence: mean |Δ log-probability| per token when a second GPU re-scores the same token IDs</span></div>
+          ${recentTable(S, M, g, th)}
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3>What "normal" looks like</h3></div>
+          <div class="baselines">${bls.length ? bls.map(([k, b]) => `
+            <div class="bl"><div class="top" style="display:flex;justify-content:space-between;gap:8px"><b>${esc(k.replace("|", " ↔ "))}</b><span class="state ${b.ready ? "Healthy" : "Learning"}">${b.ready ? "learned" : "learning"}</span></div>
+              <div class="small">normal gap <span class="mono">${fmt(b.mean, 4)} ± ${fmt(b.std, 4)}</span> from ${b.samples} checks</div>
+              ${b.ready ? "" : `<div class="prog"><i style="width:${Math.min(100, 100 * b.samples / (set.baseline_samples || 200))}%"></i></div>`}</div>`).join("")
+            : `<p class="small muted">No checks yet. The Detector learns the normal gap for each vendor pairing from the first ${set.baseline_samples || 200} checks.</p>`}</div>
+          <p class="small muted">Different GPU models round numbers slightly differently, so some gap is normal. Scores measure how far a pair is above this learned normal.</p>
+        </div>
+      </div>`;
+    setHTML($("det"), html);
+  }
+
+  function chart(S, M, g, color, th) {
+    const W = 720, H = 260, pl = 36, pr = 92, pt = 10, pb = 26;
+    const now = S.now || Date.now() / 1000, t0 = now - windowMin * 60;
+    const hist = S.history || {};
+    const series = g.members.map((m) => {
+      let pts = (hist[m.name] || []).filter(([t]) => t >= t0);
+      if (!pts.length && m.score !== null && m.score !== undefined) pts = [[now, m.score]];
+      return { m, pts };
+    });
+    const vals = series.flatMap((s) => s.pts.map((p) => p[1]));
+    const ymin = Math.min(-2, ...vals), ymax = Math.min(20, Math.max(th.quarantine + 2, ...vals.map((v) => v + 1)));
+    const X = (t) => pl + (W - pl - pr) * (t - t0) / (now - t0);
+    const Y = (v) => pt + (H - pt - pb) * (1 - (v - ymin) / (ymax - ymin));
+    let o = `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="GPU scores over the last ${windowMin} minutes">`;
+    o += `<rect class="band-q" x="${pl}" y="${Y(ymax)}" width="${W - pl - pr}" height="${Y(th.quarantine) - Y(ymax)}"/>`;
+    o += `<rect class="band-s" x="${pl}" y="${Y(th.quarantine)}" width="${W - pl - pr}" height="${Y(th.suspect) - Y(th.quarantine)}"/>`;
+    o += `<rect class="band-h" x="${pl}" y="${Y(th.suspect)}" width="${W - pl - pr}" height="${Y(ymin) - Y(th.suspect)}" opacity=".55"/>`;
+    const step = ymax - ymin > 12 ? 5 : 2;
+    for (let v = Math.ceil(ymin / step) * step; v <= ymax; v += step) o += `<line class="grid" x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${pl - 6}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`;
+    o += `<line class="thr" stroke="var(--warn)" x1="${pl}" x2="${W - pr}" y1="${Y(th.suspect)}" y2="${Y(th.suspect)}"/>`;
+    o += `<line class="thr" stroke="var(--crit)" x1="${pl}" x2="${W - pr}" y1="${Y(th.quarantine)}" y2="${Y(th.quarantine)}"/>`;
+    o += `<text x="${pl + 6}" y="${Y(th.quarantine) - 5}">quarantine</text><text x="${pl + 6}" y="${Y(th.suspect) - 5}">suspect</text><text x="${pl + 6}" y="${Y(ymin) - 6}">normal</text>`;
+    for (let k = 0; k <= 3; k++) { const t = t0 + (now - t0) * k / 3; o += `<text x="${X(t)}" y="${H - 8}" text-anchor="${k === 0 ? "start" : k === 3 ? "end" : "middle"}">${k === 3 ? "now" : `-${Math.round((now - t) / 60)}m`}</text>`; }
+    const ends = [];
+    for (const { m, pts } of series) {
+      if (!pts.length) continue;
+      const d = pts.map(([t, v], i) => `${i ? "L" : "M"}${X(t).toFixed(1)},${Y(Math.max(ymin, Math.min(ymax, v))).toFixed(1)}`).join(" ");
+      o += pts.length > 1 ? `<path class="line" stroke="${color[m.name]}" d="${d}"/>` : "";
+      const [lt, lv] = pts[pts.length - 1];
+      o += `<circle cx="${X(lt)}" cy="${Y(Math.max(ymin, Math.min(ymax, lv)))}" r="4" fill="${color[m.name]}"/>`;
+      ends.push({ y: Y(Math.max(ymin, Math.min(ymax, lv))), text: `${L(M, m.name)} ${fmt(lv, 1)}`, c: color[m.name] });
+    }
+    ends.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 14) ends[i].y = ends[i - 1].y + 14;
+    for (const e of ends) o += `<text class="end" x="${W - pr + 8}" y="${e.y + 4}" style="fill:${e.c}">${esc(e.text)}</text>`;
+    if (!ends.length) o += `<text x="${(W - pr + pl) / 2}" y="${H / 2}" text-anchor="middle">Scores start after the learning phase</text>`;
+    return o + "</svg>";
+  }
+
+  function graph(M, g, sc, th, color) {
+    const mem = g.members.filter((m) => m.ready).slice(0, 8);
+    if (mem.length < 2) return `<div class="empty">Needs at least 2 ready GPUs</div>`;
+    const W = 340, H = 270, cx = W / 2, cy = H / 2 + 4, r = mem.length === 2 ? 95 : 92;
+    const pos = {};
+    mem.forEach((m, i) => { const a = -Math.PI / 2 + 2 * Math.PI * i / mem.length; pos[m.name] = [cx + r * Math.cos(a), cy + r * Math.sin(a)]; });
+    const minChecks = (sc.settings || {}).min_pair_checks || 20;
+    let o = `<svg class="graph" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pairwise agreement between GPUs">`;
+    let labels = "";
+    for (let i = 0; i < mem.length; i++) for (let j = i + 1; j < mem.length; j++) {
+      const a = mem[i].name, b = mem[j].name, key = [a, b].sort().join("|");
+      const p = (sc.pairs || {})[key];
+      const [x1, y1] = pos[a], [x2, y2] = pos[b];
+      let stroke = "var(--line)", txt = "learning", dash = "4 6";
+      if (p) {
+        stroke = p.z >= th.quarantine ? "var(--crit)" : p.z >= th.suspect ? "var(--warn)" : "var(--good)";
+        txt = `${fmt(p.z, 1)}σ`; dash = p.checks < minChecks ? "4 6" : "";
+      }
+      o += `<line class="edge" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${stroke}" ${dash ? `stroke-dasharray="${dash}"` : ""}/>`;
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      labels += `<rect class="halo" x="${mx - 24}" y="${my - 10}" width="48" height="19" rx="9"/><text class="elabel" x="${mx}" y="${my + 4}" text-anchor="middle" style="fill:${stroke === "var(--line)" ? "var(--muted)" : stroke}">${esc(txt)}</text>`;
+    }
+    o += labels;
+    for (const m of mem) {
+      const [x, y] = pos[m.name];
+      const ring = m.state === "Quarantined" ? "var(--crit)" : m.state === "Suspect" ? "var(--warn)" : m.state === "Healthy" ? "var(--good)" : "var(--accent)";
+      o += `<circle cx="${x}" cy="${y}" r="24" fill="var(--surface)" stroke="${ring}" stroke-width="3"/>`;
+      o += `<circle cx="${x}" cy="${y}" r="6" fill="${color[m.name]}"/>`;
+      const below = y > cy;
+      o += `<text x="${x}" y="${below ? y + 40 : y - 32}" text-anchor="middle" style="font-weight:600">${esc(L(M, m.name))}</text>`;
+      o += `<text x="${x}" y="${below ? y + 54 : y - 46 + 28}" text-anchor="middle" style="fill:var(--muted);font-size:10.5px" ${below ? "" : 'visibility="hidden"'}>${esc(m.state)}</text>`;
+    }
+    return o + "</svg>";
+  }
+
+  function recentTable(S, M, g, th) {
+    const rows = (S.recent || []).filter((r) => r.group === g.name).slice(0, 8);
+    if (!rows.length) return `<p class="small muted">No checks yet.</p>`;
+    const now = S.now || Date.now() / 1000;
+    return `<div class="tablewrap"><table><thead><tr><th>When</th><th>Answered by</th><th>Re-scored by</th><th>Gap</th><th>vs normal</th></tr></thead><tbody>${rows.map((r) => {
+      const hi = r.z !== null && r.z !== undefined && r.z >= th.suspect;
+      const verdict = r.z === null || r.z === undefined ? `<span class="chk lrn">learning</span>` : `<span class="chk ${hi ? "hi" : "ok"}">${r.z >= 0 ? "+" : ""}${fmt(r.z, 1)}σ ${hi ? "high" : "normal"}</span>`;
+      return `<tr class="${hi ? "high" : ""}"><td class="small muted">${ago(r.ts, now)}</td><td>${esc(L(M, r.primary))}</td><td>${esc(L(M, r.checker))}</td><td class="mono">${fmt(r.gap, 4)}</td><td>${verdict}</td></tr>`;
+    }).join("")}</tbody></table></div>`;
+  }
+
+  function vendorView(S, M) {
+    const V = S.vendor || { status: "not checked", nodes: {} };
+    const rows = M.groups.flatMap((g) => g.members.map((m) => ({ m, g })));
+    const seen = new Set(rows.map((r) => r.m.nodeInfo && r.m.nodeInfo.name));
+    for (const n of M.free) if (!seen.has(n.name)) rows.push({ m: { name: shortProduct(n.product) || n.short, node: n.name, nodeInfo: n, state: "Unused", unchecked: true }, g: null });
+    if (!rows.length) { setHTML($("vendor"), `<div class="empty">No GPU nodes yet.</div>`); return; }
+    const connected = String(V.status || "").startsWith("connected");
+    const vendorOf = (m) => (V.nodes || {})[(m.nodeInfo && m.nodeInfo.name) || m.node] || { verdict: "unknown", problems: [], gpus: [], conditions: [] };
+    const metric = (g, k, unit = "", d = 0) => g[k] === undefined ? "" : `${fmt(g[k], d)}${unit}`;
+    let vendErr = 0, vendOk = 0, dkBad = [], silent = [];
+    const body = rows.map(({ m }) => {
+      const v = vendorOf(m);
+      const dk = m.unchecked ? "unk" : m.state === "Quarantined" ? "err" : m.state === "Suspect" ? "warn" : m.state === "Healthy" ? "ok" : "unk";
+      const dkText = m.unchecked ? "not checked" : m.state === "Starting" ? "not ready" : m.state;
+      const vd = v.verdict === "error" ? "err" : v.verdict === "ok" ? "ok" : "unk";
+      if (vd === "err") vendErr++; if (vd === "ok") vendOk++;
+      if (dk === "err" || dk === "warn") { dkBad.push(L(M, m.name)); if (vd !== "err") silent.push(L(M, m.name)); }
+      const g = v.gpus[0] || {};
+      const isAmd = (m.nodeInfo && m.nodeInfo.vendor) === "amd";
+      const errBits = isAmd
+        ? [["ECC uncorrectable", metric(g, "amdEccUnc")], ["ECC corrected", metric(g, "amdEccCor")]]
+        : [["XID", g.xid === undefined ? "" : g.xid > 0 ? `<b style="color:var(--crit)">${fmt(g.xid, 0)}</b>` : "none"],
+           ["ECC uncorrectable", metric(g, "eccDbe")], ["ECC corrected", metric(g, "eccSbe")], ["rows retired", metric(g, "remapUnc")]];
+      const live = isAmd ? [["temp", metric(g, "amdTemp", "°C")], ["power", metric(g, "amdPower", " W")], ["busy", metric(g, "amdUtil", "%")]]
+        : [["temp", metric(g, "temp", "°C")], ["power", metric(g, "power", " W")], ["busy", metric(g, "util", "%")]];
+      const fmtList = (l) => l.filter(([, x]) => x !== "").map(([k, x]) => `${k} <b>${x}</b>`).join(" · ");
+      const conds = (v.conditions || []).map((c) => `${esc(c.type)}=${esc(c.status)}`).join(", ");
+      const vText = vd === "err" ? "error reported" : vd === "ok" ? "no errors" : connected ? "no data for this node" : "not connected";
+      const contrast = (dk === "err" || dk === "warn") && vd === "ok";
+      return `<tr class="${contrast ? "contrast" : ""}">
+        <td><b>${esc(L(M, m.name))}</b><div class="small muted mono">${esc(shortNode(m.node))}</div></td>
+        <td><span class="verdict-cell ${vd}">${vText}</span>${v.problems.length ? `<div class="small" style="color:var(--crit)">${v.problems.map(esc).join("<br>")}</div>` : ""}</td>
+        <td class="metrics">${fmtList(errBits) || "–"}${conds ? `<br>conditions: ${conds}` : ""}</td>
+        <td class="metrics">${fmtList(live) || "–"}</td>
+        <td><span class="verdict-cell ${dk}">${esc(dkText)}</span>${m.score !== undefined && m.score !== null ? `<div class="small muted">score ${fmt(m.score, 1)}</div>` : ""}</td>
+      </tr>`;
+    }).join("");
+    const vendCls = !connected ? "unk" : vendErr ? "err" : "ok";
+    const vendBig = !connected ? "Not connected" : vendErr ? `${vendErr} GPU${vendErr > 1 ? "s" : ""} with errors` : "No errors on any GPU";
+    const dkCls = dkBad.length ? "err" : rows.some((r) => r.m.state === "Healthy") ? "ok" : "unk";
+    const dkBig = dkBad.length ? `${dkBad.join(", ")} flagged` : dkCls === "ok" ? "All answers agree" : "Not scoring yet";
+    const note = silent.length && connected
+      ? `<div class="verdict warn"><b>Silent fault:</b> Dual-Key flagged ${silent.map(esc).join(", ")} while the vendor tools report no errors for ${silent.length > 1 ? "them" : "it"}. The GPU runs, stays within temperature and power, and raises no XID or ECC error, but its answers no longer match its partners'.</div>` : "";
+    setHTML($("vendor"), `
+      <div class="vs-head">
+        <div class="vs-card ${vendCls}"><span class="label">Vendor tools say</span><span class="big">${vendBig}</span>
+          <span class="small muted">${connected ? "DCGM / AMD exporter metrics and node health conditions" : esc(V.status)}</span></div>
+        <div class="vs-card ${dkCls === "err" ? "err" : dkCls}"><span class="label">Dual-Key says</span><span class="big">${esc(dkBig)}</span>
+          <span class="small muted">answers re-scored across GPUs</span></div>
+      </div>
+      ${note}
+      <div class="tablewrap"><table><thead><tr><th>GPU</th><th>Vendor tools</th><th>Hardware errors</th><th>Is it running</th><th>Dual-Key</th></tr></thead><tbody>${body}</tbody></table></div>
+      <p class="small muted">XID = errors the NVIDIA driver logs for GPU faults. ECC = memory errors the GPU detected itself. Rows retired = memory the GPU took out of service. Silent data corruption trips none of these, which is why Dual-Key checks the answers instead.</p>`);
+  }
+
+  function incidentsView(S, M) {
+    const list = (S.incidents || []).slice().sort((a, b) => String(b.created).localeCompare(String(a.created)));
+    if (!list.length) { setHTML($("incidents"), `<div class="empty">No incidents. One opens automatically when a GPU is quarantined.</div>`); return; }
+    const steps = ["Open", "Contained", "Validating", "Resolved"];
+    setHTML($("incidents"), list.slice(0, 6).map((i) => {
+      const st = i.status || {}, ev = st.evidence || {}, tel = st.telemetry || {}, dg = st.diagnostics || {}, val = st.validation || {};
+      const phase = st.phase || "Open";
+      const reached = phase === "HandedOff" ? 1 : phase === "ValidationFailed" ? 2 : phase === "ValidationTimedOut" ? 2 : Math.max(0, steps.indexOf(phase));
+      const cls = phase === "Resolved" ? "done" : phase === "Validating" ? "val" : "open";
+      const stepHtml = steps.map((x, k) => {
+        let c = k < reached ? "ok" : k === reached ? (phase.startsWith("Validation") && phase !== "Validating" ? "bad" : phase === "Resolved" ? "ok" : "on") : "";
+        const label = k === 1 && phase === "HandedOff" ? "Handed to vendor" : k === 2 && phase === "ValidationFailed" ? "Validation failed" : k === 2 && phase === "ValidationTimedOut" ? "Validation timed out" : x;
+        return `<span class="${c}">${esc(label)}</span>`;
+      }).join("");
+      const partners = (ev.partners || []).map((p) => `${esc(L(M, p.partner))} <b>+${fmt(p.z, 1)}σ</b> (${p.checks} checks)`).join("<br>") || "–";
+      const telText = tel.verdict === "error" ? `<b style="color:var(--crit)">errors reported</b><br>${(tel.problems || []).map(esc).join("<br>")}`
+        : tel.verdict === "ok" ? `<b style="color:var(--good)">no errors reported</b>${tel.gpus && tel.gpus[0] ? `<br>XID ${tel.gpus[0].xid ? fmt(tel.gpus[0].xid, 0) : "none"} · ECC uncorrectable ${fmt(tel.gpus[0].eccDbe ?? tel.gpus[0].amdEccUnc, 0)} · ${fmt(tel.gpus[0].temp ?? tel.gpus[0].amdTemp, 0)}°C` : ""}`
+        : esc(tel.status || "collecting…");
+      const dgText = dg.result ? `<b style="color:${dg.result === "Fail" ? "var(--crit)" : dg.result === "Pass" ? "var(--good)" : "var(--muted)"}">${esc(dg.result)}</b> · ${esc(dg.summary || "")}<br><span class="muted">${esc(dg.command || "")}</span>` : "running…";
+      const actions = (st.actions || []).slice(-6).map((a) => `<li><span class="mono">${esc(hhmm(a.time))}</span> ${esc(a.action)}: ${esc(a.result || "")}</li>`).join("");
+      const releaseCmd = `oc patch gii ${i.name} -n dualkey --type merge -p '{"spec":{"release":true}}'`;
+      return `<div class="inc ${cls}">
+        <div class="inc-head"><h3>${esc(L(M, i.spec.gpu))} on ${esc(shortNode(i.spec.node))}</h3><span class="small muted mono">${esc(i.name)} · policy ${esc(st.policy || "")} · opened ${esc(hhmm(st.openedAt || i.created))}</span></div>
+        <div class="inc-steps">${stepHtml}</div>
+        <div class="inc-grid">
+          <div><span class="label">Evidence (Dual-Key)</span><br>score ${fmt(ev.score, 1)} vs quarantine ${ev.thresholds ? ev.thresholds.quarantine : 5}<br>${partners}</div>
+          <div><span class="label">Vendor telemetry at that moment</span><br>${telText}</div>
+          <div><span class="label">Vendor diagnostic on the node</span><br>${dgText}</div>
+          <div><span class="label">After release</span><br>${val.progress ? esc(val.progress) : phase === "Resolved" ? "passed" : "not released yet"}${val.result ? `<br><b>${esc(val.result)}</b>` : ""}</div>
+        </div>
+        ${actions ? `<ol>${actions}</ol>` : ""}
+        ${["Open", "Contained", "HandedOff", "ValidationFailed", "ValidationTimedOut"].includes(phase) ? `<div class="small">After repair, release it: <code>${esc(releaseCmd)}</code></div>` : ""}
+      </div>`;
+    }).join(""));
+  }
+
+  function events(S) {
+    const ev = (S.cluster.events || []).slice().reverse();
+    setHTML($("events"), ev.length ? ev.map((e) => `<li><time>${esc(hhmm(e.time))}</time><span>${esc(e.message)}</span></li>`).join("") : `<li><span></span><span class="muted">No events yet.</span></li>`);
+  }
+
+  function render(state) {
+    S = state;
+    const M = model(S);
+    header(S, M); lanes(S, M); pipeline(S, M); detector(S, M); vendorView(S, M); incidentsView(S, M); events(S);
+  }
+
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b || !S) return;
+    if (b.dataset.g) { selected = b.dataset.g; render(S); }
+    if (b.dataset.w) { windowMin = Number(b.dataset.w); render(S); }
+  });
+
+  // ------------------------------------------------------------ live polling
+  async function poll() {
+    try {
+      const r = await fetch("api/state", { cache: "no-store" });
+      if (!r.ok) throw new Error((await r.text()).slice(0, 300) || r.statusText);
+      render(await r.json());
+      $("err").hidden = true;
+      return true;
+    } catch (e) {
+      if (S) { $("err").textContent = `Lost contact with the dashboard backend: ${e.message}`; $("err").hidden = false; }
+      return !!S;
+    }
+  }
+
+  // ------------------------------------------------------------ demo: scripted run of a 3-GPU cluster
+  function demo() {
+    $("demo").hidden = false;
+    const NODES = [
+      { name: "ip-10-0-1-116.us-east-2.compute.internal", short: "ip-10-0-1-116", vendor: "nvidia", gpus: 1, product: "Tesla-T4", instanceType: "g4dn.xlarge", zone: "us-east-2a" },
+      { name: "ip-10-0-15-24.us-east-2.compute.internal", short: "ip-10-0-15-24", vendor: "nvidia", gpus: 1, product: "NVIDIA-L4", instanceType: "g6.xlarge", zone: "us-east-2a" },
+      { name: "ip-10-0-44-44.us-east-2.compute.internal", short: "ip-10-0-44-44", vendor: "nvidia", gpus: 1, product: "NVIDIA-A10G", instanceType: "g5.2xlarge", zone: "us-east-2b" },
+      { name: "ip-10-0-30-7.us-east-2.compute.internal", short: "ip-10-0-30-7", vendor: "nvidia", gpus: 1, product: "NVIDIA-L40S", instanceType: "g6e.xlarge", zone: "us-east-2a" },
+    ];
+    const G = "ibm-granite-granite-3-3-2b-instruct-float16-7a0cd0";
+    const MEM = NODES.slice(0, 3).map((n) => ({ name: `ref-${n.short}`, vendor: "nvidia", node: n.name, managed: true, namespace: "dualkey", pod: `dk-model-ref-${n.short}` }));
+    const BAD = MEM[0].name;
+    const SEC = 10;   // each demo tick is 10 simulated seconds
+    let t, timer, events, start, history, pairs, gpu, bl, recent, checks;
+    const rnd = (a, b) => a + Math.random() * (b - a);
+    const iso = (s) => new Date(s * 1000).toISOString();
+    let incidentAt = null;
+    function demoIncident(now) {
+      if (incidentAt === null) return [];
+      const age = t - incidentAt, at = (k) => iso(start + (incidentAt + k) * SEC);
+      const pairs = Object.entries(pairs_()).filter(([k]) => k.includes(BAD)).map(([k, p]) => ({ partner: k.split("|").find((x) => x !== BAD), z: Math.round(p.z * 10) / 10, checks: p.checks }));
+      const actions = [{ time: at(0), action: "opened", result: "disagreed with 2 of 2 partners beyond the quarantine line" },
+        { time: at(0), action: "set node condition DualKeyInferenceIntegrity=True", result: "ok" },
+        { time: at(0), action: "cordon", result: "tainted ip-10-0-1-116 dualkey.io/suspect:NoSchedule (running pods stay)" }];
+      if (age >= 1) actions.push({ time: at(1), action: "vendor telemetry snapshot", result: "NVIDIA DCGM exporter: no errors reported" });
+      if (age >= 3) actions.push({ time: at(3), action: "vendor diagnostic", result: "Pass: 9 checks passed" });
+      return [{ name: "ip-10-0-1-116-20261016-1842", created: at(0), spec: { gpu: BAD, node: NODES[0].name, vendor: "nvidia", group: G },
+        status: { phase: "Contained", policy: "cordon", openedAt: at(0), actions,
+          evidence: { score: gpu[BAD].score, thresholds: { suspect: 3, quarantine: 5 }, partners: pairs },
+          telemetry: age >= 1 ? { status: "connected", verdict: "ok", source: "NVIDIA DCGM exporter", problems: [], gpus: [{ xid: 0, eccDbe: 0, temp: 61 }] } : {},
+          diagnostics: age >= 3 ? { result: "Pass", summary: "9 checks passed", command: "dcgmi diag -r 1 -j" } : {} } }];
+    }
+    const pairs_ = () => pairs;
+    function reset() {
+      incidentAt = null;
+      t = 0; start = Date.now() / 1000 - 140 * SEC; events = []; history = {}; recent = []; checks = 0;
+      pairs = {}; bl = { n: 0, mean: 0.0118, std: 0.0041 };
+      gpu = Object.fromEntries(MEM.map((m) => [m.name, { state: "Learning", score: null, checks: 0, confirm: 0 }]));
+    }
+    const say = (m) => events.push({ time: iso(start + t * SEC), message: m });
+    function tick() {
+      const now = start + t * SEC;
+      const readyN = t < 4 ? 0 : Math.min(3, Math.max(0, Math.floor((t - 7) / 2)));
+      if (t === 1) say("First scan found 0 vLLM model servers on GPUs");
+      if (t === 1) say("1 GPU node skipped: ip-10-0-30-7 runs a notebook pod (not a vLLM server)");
+      if (t === 3) say(`No discovered group has 3 ready members; deploying the reference model on ip-10-0-1-116, ip-10-0-15-24, ip-10-0-44-44`);
+      if (t === 3) say(`Found reference group ${G} for ibm-granite/granite-3.3-2b-instruct: waiting for 3 ready members`);
+      if (t === 12) say(`Reference group ${G} is ready: 3 members (ref-ip-10-0-1-116, ref-ip-10-0-15-24, ref-ip-10-0-44-44); checking starts`);
+      if (t === 66) say("Lab: fault injection on the T4 (bit 13 flipped in 200 weights); its server restarted with the corrupted model");
+      const checking = readyN >= 3;
+      const n = checking ? 20 : 0;       // checks this tick (about 120/min)
+      for (let i = 0; i < n; i++) {
+        const [a, b] = (() => { const x = MEM[Math.floor(Math.random() * 3)].name; let y; do { y = MEM[Math.floor(Math.random() * 3)].name; } while (y === x); return [x, y]; })();
+        if (gpu[a].state === "Quarantined" || gpu[b].state === "Quarantined") continue;
+        const faulty = t >= 66 && (a === BAD || b === BAD);
+        const gap = Math.max(0, bl.mean + rnd(-1.6, 1.6) * bl.std + (faulty ? rnd(0.025, 0.045) : 0));
+        gpu[a].checks++; gpu[b].checks++; checks++;
+        let z = null;
+        if (bl.n < 200) bl.n++;
+        else {
+          z = Math.max(-20, Math.min(20, (gap - bl.mean) / bl.std));
+          const k = [a, b].sort().join("|");
+          const p = pairs[k] || (pairs[k] = { z: 0, checks: 0 });
+          p.z = p.checks === 0 ? z : 0.05 * z + 0.95 * p.z; p.checks++;
+        }
+        recent.unshift({ ts: now - (n - i) * SEC / n, group: G, primary: a, checker: b, gap, z: z === null ? null : Math.round(z * 100) / 100, source: "probe" });
+      }
+      recent = recent.slice(0, 40);
+      if (bl.n >= 200) {
+        for (const m of MEM) {
+          const g = gpu[m.name];
+          if (g.state === "Quarantined") continue;
+          const vals = Object.entries(pairs).filter(([k, p]) => k.split("|").includes(m.name) && p.checks >= 20 && !k.split("|").some((x) => x !== m.name && gpu[x].state === "Quarantined")).map(([, p]) => p.z);
+          g.score = vals.length >= 2 ? Math.min(...vals) : null;
+          if (g.state === "Learning") g.state = "Healthy";
+          if (g.score === null) continue;
+          if (g.state === "Healthy" && g.score >= 3) { g.state = "Suspect"; g.confirm = 0; say(`${m.name} is Suspect (score ${g.score.toFixed(1)})`); }
+          else if (g.state === "Suspect") {
+            if (g.score >= 5) { g.confirm += 4; if (g.confirm >= 10) { g.state = "Quarantined"; say(`${m.name} Quarantined (score ${g.score.toFixed(1)}); node ip-10-0-1-116 tainted dualkey.io/suspect`); incidentAt = t; say(`Incident ip-10-0-1-116-20261016-1842 opened for ${m.name} (policy cordon)`); } }
+            else if (g.score < 2.1) g.state = "Healthy";
+          }
+          if (g.score !== null) (history[m.name] = history[m.name] || []).push([now, Math.round(g.score * 1000) / 1000]);
+        }
+      }
+      const lastScan = iso(now - (now % 30));
+      const members = MEM.map((m, i) => ({ ...m, ready: i < readyN, reason: i < readyN ? "" : t < 7 ? "downloading the model" : "loading the model onto the GPU",
+        endpoint: `http://dk-model-ref-${m.name.slice(4)}:8000`, model: "ibm-granite/granite-3.3-2b-instruct",
+        build: i < readyN ? { vllm: "0.11.0", driver: "580.82.07", image: "docker.io/vllm/vllm-openai:latest", imageDigest: "sha256:3f9c2a7be41d" } : {} }));
+      const identity = { modelId: "ibm-granite/granite-3.3-2b-instruct", revision: "707f574c62054322f6b5b04b6d075f0a8f05e0f0", dtype: "float16",
+        quantization: "none", tp: "1", tokenizer: "9b1e44c07a2d", vllm: "0.11.0" };
+      const placed = t >= 3;
+      const detecting = bl.n >= 200;
+      const state = {
+        now,
+        cluster: {
+          name: "fleet", mode: "discover", phase: !placed ? "Discovering" : checking ? "Checking" : "DeployingReference",
+          message: "", events: events.slice(-50), thresholds: { suspect: 3, quarantine: 5 }, probeRate: 1, sampleRate: 0.05,
+          discovery: { lastScan, servers: placed ? readyN : 0,
+            skipped: [{ namespace: "data-science", pod: "jupyter-notebook-0", node: NODES[3].name, reason: "not a vLLM server" }],
+            reference: placed ? { placements: MEM.map((m) => ({ node: m.node, vendor: "nvidia" })) } : {} },
+          detection: checking ? { groups: { [G]: { phase: detecting ? "Detecting" : "Learning" } } } : {},
+        },
+        groups: placed ? [{ name: G, spec: { modelId: "ibm-granite/granite-3.3-2b-instruct", dtype: "float16", source: "reference", identity },
+          status: { phase: checking ? "Ready" : "Waiting", readyMembers: readyN, identity: readyN ? identity : {}, message: checking ? "" : `${readyN} of 3 members ready`, members } }] : [],
+        records: placed ? MEM.map((m) => ({ name: m.name, spec: { gpu: m.name, vendor: "nvidia", node: m.node, group: G },
+          status: { state: gpu[m.name].state, score: gpu[m.name].score, checks: gpu[m.name].checks } })) : [],
+        nodes: NODES.map((n) => ({ ...n, tainted: n.name === MEM[0].node && gpu[BAD].state === "Quarantined" })),
+        pipeline: checking ? { verifyWaiting: Math.floor(rnd(0, 4)), resultsWaiting: 0, verifyTotal: Math.floor(checks / 2), checksTotal: checks,
+          lastMinute: gpu[BAD].state === "Quarantined" ? 60 : 120, probeLastMinute: 60, gatewayLastMinute: 0, last: recent[0] || null } : {},
+        recent,
+        scorer: checking ? { [G]: { settings: { baseline_samples: 200, min_pair_checks: 20, confirm_checks: 10 },
+          baselines: { "nvidia|nvidia": { mean: bl.mean, std: bl.std, samples: bl.n, ready: bl.n >= 200 } },
+          pairs: Object.fromEntries(Object.entries(pairs).map(([k, p]) => [k, { z: Math.round(p.z * 1000) / 1000, checks: p.checks }])),
+          members: Object.fromEntries(MEM.map((m) => [m.name, { ...gpu[m.name], vendor: "nvidia" }])) } } : {},
+        history,
+        overhead: checking ? { windowSeconds: 300, checks: 600, checksPerMinute: 120, rescoreP50: 0.071 + rnd(-0.005, 0.005), rescoreP95: 0.134, queueP50: 0.21, queueP95: 0.62,
+          answerP50: 0.83, checkVsAnswer: 0.086, scoredTokensAvg: 94, checksPerSample: 2, checkerBusyPct: Object.fromEntries(MEM.map((m) => [m.name, gpu[m.name].state === "Quarantined" ? 0 : 4.8])),
+          costPer1000Checks: 0.0172, sampleRate: 0.05, costPer1000Requests: 0.0017, priceSource: "AWS on-demand list price (approx.)",
+          note: "Re-score time is wall time per check (an upper bound on checker GPU time); vLLM skips its prefix cache for this scoring, so every check is a full prefill" } : {},
+        incidents: demoIncident(now),
+        vendor: { status: "connected", nodes: Object.fromEntries(NODES.map((n, i) => [n.name, { source: "NVIDIA DCGM exporter", verdict: "ok", problems: [], conditions: [],
+          gpus: [{ gpu: "0", xid: 0, eccDbe: 0, eccSbe: 0, remapUnc: n.product.includes("T4") ? undefined : 0,
+            temp: [61, 54, 58, 41][i] + Math.round(rnd(-1, 1)), power: [52, 61, 118, 34][i] + Math.round(rnd(-3, 3)), util: i < 3 && checking ? Math.round(rnd(38, 55)) : 0 }] }])) },
+      };
+      render(state);
+      t++;
+      if (t > 150) { reset(); }
+    }
+    $("restart").onclick = () => { reset(); tick(); };
+    reset(); tick();
+    timer = setInterval(tick, 1000);
+  }
+
+  (async () => {
+    const isDemo = new URLSearchParams(location.search).has("demo");
+    const live = isDemo ? false : await poll();
+    if (live) setInterval(poll, 3000); else demo();
+  })();
+})();
+</script>
