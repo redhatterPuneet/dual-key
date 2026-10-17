@@ -39,6 +39,72 @@ the faulty one.
 **Why this points at the GPU and not the model:** the model is the same file on every GPU. Normal
 answers on two GPUs and unusual answers on a third means the difference comes from the third GPU.
 
+### How an answer is checked: token IDs, not text
+
+The checker GPU never receives text. It receives the exact list of token ID numbers the first GPU
+used, so both GPUs score precisely the same items in the same order, and a difference can only come
+from their arithmetic.
+
+**What a token is.** A model does not read letters or words. Before anything reaches the GPU, the text
+is cut into pieces called tokens, and each piece is replaced by an ID number from a fixed vocabulary.
+The model only ever works with those numbers, and its answer comes out as numbers too, turned back
+into text at the end.
+
+**Who does the mapping.** The vocabulary is a file that ships with the model (`tokenizer.json`), next
+to the weights. The serving software (vLLM) looks text up in it on the CPU. The GPU never sees words
+and never decides what an ID means; it only does arithmetic on numbers. Servers loaded with the same
+model files therefore use the same mapping, whatever the GPU brand.
+
+| Who | Does what |
+|---|---|
+| vLLM on the CPU | Turns the prompt into IDs using `tokenizer.json`, and turns the answer's IDs back into text |
+| The GPU | Takes the IDs, runs the model's maths with the weights, and gives a probability for every possible next ID |
+
+**The check, step by step.**
+
+1. **The first GPU answers.** The prompt "Is the GPU faulty?" becomes IDs, the GPU writes its answer
+   one ID at a time, and for every answer token it records how likely it found that token.
+2. **Dual-Key keeps the numbers, not the text.** It stores the prompt IDs, the answer IDs and those
+   probabilities. The answer is never turned back into text for checking.
+3. **The checker gets the same IDs.** It is sent the whole list, prompt IDs followed by answer IDs, and
+   asked: "for each of these IDs, how likely did you find it at that position?" It is not allowed to
+   write anything of its own. This is called *teacher forcing*: you hand the model the answer and ask
+   it to score it.
+4. **Compare position by position.** Position 1 is the same token on both GPUs, position 2 is the same
+   token, and so on, because both scored one identical list. Nothing was re-cut, so nothing can shift
+   out of line.
+5. **The gap** is the average difference between the two GPUs' scores across the answer's tokens
+   (measured on the log of each probability).
+
+**A worked example** (illustrative IDs and numbers). The answer is "No, it is healthy." Each row is one
+answer token, scored by the GPU that wrote it, a healthy peer, and a faulty peer:
+
+| Position | Token ID | Text piece | GPU that answered | Healthy checker | Faulty checker |
+|---|---|---|---|---|---|
+| 1 | 2822 | `No` | 81.0% | 80.9% | 52.4% |
+| 2 | 11 | `,` | 97.2% | 97.2% | 90.1% |
+| 3 | 433 | ` it` | 64.5% | 64.8% | 31.0% |
+| 4 | 374 | ` is` | 92.1% | 92.0% | 85.6% |
+| 5 | 9498 | ` healthy` | 47.3% | 47.1% | 12.9% |
+| 6 | 13 | `.` | 88.6% | 88.7% | 79.3% |
+
+The healthy checker differs only in the third or fourth digit, which is normal rounding between
+different GPUs. The faulty one differs a lot on several tokens. Both checkers scored exactly the same
+six IDs, so the comparison is fair by construction.
+
+**Why vocabulary mismatch cannot cause false alarms.**
+
+- **No text is re-cut.** The checker scores the IDs it is given, so the two sides always line up.
+- **Mismatched servers are never compared.** At discovery, Dual-Key asks each server to cut a fixed test
+  sentence into IDs and keeps a fingerprint of the result. Servers whose fingerprints differ (for
+  example a different model revision or tokenizer file) go into separate groups.
+- **Same serving software.** Groups also require the same vLLM version, so a different serving engine
+  such as TensorRT-LLM is never compared with vLLM.
+
+In short: the vocabulary is a fixed lookup table packaged with the model and used on the CPU; the GPU
+only computes probabilities for ID numbers. Dual-Key makes sure the lookup table is identical
+everywhere, then checks the GPU's part.
+
 ## 3. The parts and where they run
 
 ![Architecture](images/architecture.png)
